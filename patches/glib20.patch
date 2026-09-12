@@ -33,3 +33,11 @@ Index: src/router/glib20/libglib/meson.build
      glib_conf.set('HAVE_SYS_XATTR_H', 1)
      glib_conf_prefix = glib_conf_prefix + '#define @0@ 1\n'.format('HAVE_SYS_XATTR_H')
    #failure. try libattr
+Index: src/router/rules/glib.mk
+===================================================================
+--- src/router/rules/glib.mk
++++ src/router/rules/glib.mk
+@@ -174,2 +174,2 @@
+-glib20: libffi zlib util-linux util-linux-install
++glib20: libffi zlib util-linux util-linux-install glib20-configure
+ 	make -C util-linux install DESTDIR=$(INSTALLDIR)/util-linux
