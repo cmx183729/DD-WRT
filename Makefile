@@ -8,6 +8,9 @@ REVISION := HEAD
 BUILD_DIR := $(SRC_DIR)/src/router
 LINUX_DIR := $(SRC_DIR)/src/linux/universal/linux-4.14
 TOOLCHAIN_DIR := $(TOP_DIR)/toolchain-mipsel_24kc_gcc-13.1.0_musl
+TOOLCHAIN_ARCHIVE := toolchain-mipsel_24kc_gcc-13.1.0_musl.tar.gz
+TOOLCHAIN_URL := https://github.com/tsl0922/DD-WRT/releases/download/toolchain/$(TOOLCHAIN_ARCHIVE)
+TOOLCHAIN_GCC := $(TOOLCHAIN_DIR)/bin/mipsel-linux-uclibc-gcc
 
 define DefineProfile
   BOARD=$(1)
@@ -37,7 +40,7 @@ endif
 MAKE_ROUTER := $(MAKE) -C $(BUILD_DIR) -f Makefile.mt7621 BOARD=$(BOARD) DTS=$(DTS) RPROFILE=$(PROFILE)
 PATH := $(TOOLCHAIN_DIR)/bin:$(TOP_DIR)/tools:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 KERNEL := universal/linux-4.14
-CRDA_URL := git://git.kernel.org/pub/scm/linux/kernel/git/sforshee/wireless-regdb.git
+CRDA_URL := https://git.kernel.org/pub/scm/linux/kernel/git/sforshee/wireless-regdb.git
 
 export PATH SVN
 
@@ -48,9 +51,25 @@ define PatchDir
 			for f in $$(grep '^Index: ' $$p | awk '{print $$2}'); do \
 				svn revert $(SRC_DIR)/$$f; \
 			done; \
-			patch -t -d $(SRC_DIR) -p0 < $$p || true; \
+			patch -t -d $(SRC_DIR) -p0 < $$p || exit 1; \
 		done \
 	fi
+endef
+
+define VerifyLibpcapFixes
+	@grep -Fq 'rm -f libpcap/scanner.c libpcap/scanner.h' "$(BUILD_DIR)/rules/libpcap.mk" || { echo "libpcap scanner regeneration patch was not applied" >&2; exit 1; }
+	@grep -Fq -- '-Wno-error=implicit-function-declaration -Wno-implicit-function-declaration' "$(BUILD_DIR)/rules/libpcap.mk" || { echo "libpcap legacy GCC compatibility flags were not applied" >&2; exit 1; }
+	@grep -Fq '#ifndef _GNU_SOURCE' "$(BUILD_DIR)/libpcap/pcap-linux.c" || { echo "libpcap pcap-linux _GNU_SOURCE guard was not applied" >&2; exit 1; }
+	@grep -Fq '  #ifndef _GNU_SOURCE' "$(BUILD_DIR)/libpcap/ftmacros.h" || { echo "libpcap ftmacros _GNU_SOURCE guard was not applied" >&2; exit 1; }
+endef
+
+define VerifyRebasedPatches
+	@grep -Fq '#if defined(HAVE_MICRO) || !defined(HAVE_PPTPD)' "$(BUILD_DIR)/httpd/visuals/menu.c" || { echo "httpd menu patch was not applied" >&2; exit 1; }
+	@grep -Fq '#if defined(HAVE_SANSFIL) || !defined(HAVE_HOTSPOT)' "$(BUILD_DIR)/httpd/visuals/menu.c" || { echo "httpd hotspot menu patch was not applied" >&2; exit 1; }
+	@grep -Fq '# SHOBJS += $$(TOP)/register/register_check.o' "$(BUILD_DIR)/libutils/Makefile" || { echo "libutils Madwifi object patch was not applied" >&2; exit 1; }
+	@grep -Fq 'char *hostapd_eap_get_types(void)' "$(BUILD_DIR)/libutils/libshutils/shutils.c" || { echo "libutils compatibility stubs were not applied" >&2; exit 1; }
+	@grep -Fq '#if defined(HAVE_RT2880) && !defined(HAVE_MT76)' "$(BUILD_DIR)/shared/wlutils.h" || { echo "shared Short-GI capability patch was not applied" >&2; exit 1; }
+	@grep -Fq 'fakespace=errnos_' "$(BUILD_DIR)/vpnc/libgpg-error/src/Makefile.am" || { echo "libgpg-error awk compatibility is missing upstream" >&2; exit 1; }
 endef
 
 all:
@@ -83,8 +102,27 @@ checkout:
 	cp $(TOP_DIR)/files/router/Makefile.mt7621 $(BUILD_DIR)/Makefile.mt7621
 	cp $(TOP_DIR)/configs/$(BOARD)/$(subst mini,,$(CONFIG)) $(BUILD_DIR)/.config
 
-prepare:
+toolchain:
+	@if [ ! -x "$(TOOLCHAIN_GCC)" ]; then \
+		tmp=$$(mktemp "$(TOP_DIR)/.$(TOOLCHAIN_ARCHIVE).XXXXXX") || exit 1; \
+		if ! curl --fail --location --proto '=https' --retry 4 --retry-all-errors \
+			--connect-timeout 30 --output "$$tmp" "$(TOOLCHAIN_URL)"; then \
+			rm -f "$$tmp"; \
+			exit 1; \
+		fi; \
+		if ! tar --extract --gzip --file "$$tmp" --directory "$(TOP_DIR)"; then \
+			rm -f "$$tmp"; \
+			exit 1; \
+		fi; \
+		rm -f "$$tmp"; \
+	fi
+	@test -x "$(TOOLCHAIN_GCC)" || { echo "missing expected toolchain compiler: $(TOOLCHAIN_GCC)" >&2; exit 1; }
+	@"$(TOOLCHAIN_GCC)" --version >/dev/null
+
+prepare: toolchain
 	$(call PatchDir,$(TOP_DIR)/patches)
+	$(call VerifyRebasedPatches)
+	$(call VerifyLibpcapFixes)
 	$(call PatchDir,$(TOP_DIR)/patches/$(BOARD))
 ifneq (,$(findstring mt76,$(PROFILE)))
 	$(call PatchDir,$(TOP_DIR)/patches/mt76)
@@ -146,7 +184,8 @@ gen_patches:
 				src/router/glib20/libglib/meson.build  > $(TOP_DIR)/patches/glib20.patch; \
 		svn diff src/router/httpd/visuals/menu.c \
 				src/router/httpd/visuals/dd-wrt.c > $(TOP_DIR)/patches/httpd.patch; \
-		svn diff src/router/libpcap/gencode.c > $(TOP_DIR)/patches/libpcap.patch; \
+		svn diff src/router/libpcap/pcap-linux.c \
+				src/router/libpcap/ftmacros.h > $(TOP_DIR)/patches/libpcap.patch; \
 		svn diff src/router/libutils/Makefile \
 				src/router/libutils/libshutils/shutils.c > $(TOP_DIR)/patches/libutils.patch; \
 		svn diff src/router/mactelnet/Makefile > $(TOP_DIR)/patches/mactelnet.patch; \
@@ -154,9 +193,6 @@ gen_patches:
 		svn diff src/router/olsrd/src/cfgparser/local.mk > $(TOP_DIR)/patches/olsrd.patch; \
 		svn diff src/router/rules > $(TOP_DIR)/patches/rules.patch; \
 		svn diff src/router/shared > $(TOP_DIR)/patches/shared.patch; \
-		svn diff src/router/vpnc/libgpg-error/src/Makefile.am \
-				src/router/vpnc/libgpg-error/src/Makefile.in \
-				src/router/vpnc/libgpg-error/src/mkstrtable.awk > $(TOP_DIR)/patches/vpnc.patch; \
 		svn diff src/router/mac80211/drivers/net/wireless/Kconfig \
 				src/router/mac80211/drivers/net/wireless/mediatek/mt76/Kconfig > $(TOP_DIR)/patches/mt76/mac80211.patch; \
 		svn diff src/router/mac80211/drivers/net/wireless/mediatek/mt76 > $(TOP_DIR)/patches/mt76/mt76.patch; \
@@ -178,3 +214,5 @@ gen_patches:
 
 %:
 	$(MAKE_ROUTER) $*
+
+.PHONY: all checkout toolchain prepare configure httpd gen_patches

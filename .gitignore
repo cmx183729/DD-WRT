@@ -2,3 +2,8 @@ dd-wrt
 toolchain-*
 images
 /.config
+/.npm-tools/
+/tools/node
+/tools/uglifycss
+/tools/uglifyjs
+/tools/node_modules/

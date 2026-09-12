@@ -1,16 +1,17 @@
 Index: src/router/others/Makefile
 ===================================================================
---- src/router/others/Makefile	(revision 53494)
+--- src/router/others/Makefile	(revision HEAD)
 +++ src/router/others/Makefile	(working copy)
-@@ -54,7 +54,6 @@
+@@ -54,8 +54,7 @@ install:
  	install -d $(INSTALLDIR)/sbin
  	install -d $(INSTALLDIR)/usr/sbin
  	install -d $(INSTALLDIR)/usr/lib
 -	install -d $(INSTALLDIR)/usr/lib/firmware	
  	install -d $(INSTALLDIR)/lib
  	install services $(INSTALLDIR)/etc
- ifdef CONFIG_NORTHSTAR
-@@ -61,28 +60,10 @@
+ ifdef CONFIG_USB
+ 	install tune.sh $(INSTALLDIR)/usr/sbin
+@@ -64,26 +63,8 @@ ifdef CONFIG_NORTHSTAR
  	install -d $(INSTALLDIR)/etc/cfe
  	install cfe/cfe_600.bin $(INSTALLDIR)/etc/cfe
  endif
@@ -31,13 +32,16 @@ Index: src/router/others/Makefile
 -	install rt2880/RT38*.bin $(INSTALLDIR)/etc/wlan
 -	install rt2880/MT76*.BIN $(INSTALLDIR)/etc/wlan
 -else
- ifdef CONFIG_RT2880
+-ifdef CONFIG_RT2880
 -	install -d $(INSTALLDIR)/etc/wlan
 -	install rt2880/RT28*.bin $(INSTALLDIR)/etc/wlan
+-endif
+-endif
++ifdef CONFIG_RT2880
 +	install -d $(INSTALLDIR)/etc_ro/Wireless
 +	install rt2880/$(BOARD)/*.dat $(INSTALLDIR)/etc_ro/Wireless
- endif
--endif
++endif
  ifdef CONFIG_X86
  	install -d $(INSTALLDIR)/boot
  endif
+

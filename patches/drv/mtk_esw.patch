@@ -1,29 +1,26 @@
 Index: src/router/rc/rc.c
 ===================================================================
---- src/router/rc/rc.c	(revision 53494)
+--- src/router/rc/rc.c	(revision HEAD)
 +++ src/router/rc/rc.c	(working copy)
-@@ -81,6 +81,7 @@
+@@ -141,5 +141,6 @@
  #ifdef HAVE_QTN
- #include "qtn_monitor.c"
+ 	#include "qtn_monitor.c"
  #endif
 +#include "switch_mtk_esw.c"
  #include "event.c"
  #include "gratarp.c"
- 
-@@ -281,6 +282,7 @@
+@@ -436,5 +437,6 @@ struct MAIN main_calls[] = {
  #ifdef HAVE_QTN
  	{ "qtn_monitor", NULL, &qtn_monitor_main },
  #endif
 +	{ "mtk_esw", NULL, &mtk_esw_main },
  	{ "write", NULL, &write_main },
- //	{ "startservice_f", NULL, &service_main },
- //	{ "startservice", NULL, &service_main },
+ 	{ "emergency_reboot", NULL, &emergency_reboot_main },
 Index: src/router/rc/Makefile
 ===================================================================
---- src/router/rc/Makefile	(revision 53494)
+--- src/router/rc/Makefile	(revision HEAD)
 +++ src/router/rc/Makefile	(working copy)
-@@ -1103,6 +1103,9 @@
- endif
+@@ -1158,5 +1158,8 @@ endif
  endif
  
 +CFLAGS += -DUSE_MTK_GSW
@@ -32,7 +29,7 @@ Index: src/router/rc/Makefile
  include $(TOP)/rules/generic.mk
  
  CFLAGS += $(DD_CFLAGS)
-@@ -1234,6 +1237,7 @@
+@@ -1311,6 +1314,7 @@ install: all
  	cd $(INSTALLDIR)/sbin && ln -sf rc gpio
  	cd $(INSTALLDIR)/sbin && ln -sf rc softwarerevision
  	cd $(INSTALLDIR)/sbin && ln -sf rc mtd
@@ -40,3 +37,4 @@ Index: src/router/rc/Makefile
  ifeq ($(CONFIG_GPIOWATCHER),y)
  	cd $(INSTALLDIR)/sbin && ln -sf rc gpiowatcher
  endif
+

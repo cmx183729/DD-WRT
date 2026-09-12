@@ -1,8 +1,8 @@
 Index: src/router/services/Makefile
 ===================================================================
---- src/router/services/Makefile	(revision 53548)
+--- src/router/services/Makefile	(revision HEAD)
 +++ src/router/services/Makefile	(working copy)
-@@ -1439,6 +1439,9 @@
+@@ -1641,6 +1641,9 @@ endif
  ifeq ($(CONFIG_DIR860),y)
  CFLAGS_EXTRA += -DHAVE_DIR860
  endif
@@ -12,20 +12,19 @@ Index: src/router/services/Makefile
  ifeq ($(ARCHITECTURE),broadcom)
  CFLAGS_EXTRA += -DHAVE_BRCMROUTER
  endif
-@@ -1961,7 +1964,7 @@
+@@ -2182,14 +2185,14 @@ vpath %.c sysinit sysinit/switchlib sysinit/bench services tools networking netw
  all: services_main
  ifeq ($(CONFIG_RT2880),y)
  ifeq ($(CONFIG_MT7620),y)
--	$(CC) $(CFLAGS) -DNEED_PRINTF -o switch tools/switch_gsw.c -DCONFIG_RALINK_MT7620
-+	$(CC) $(CFLAGS) -DCONFIG_RALINK_MT7621 -I$(LINUXDIR)/drivers/net/ethernet/raeth -DNEED_PRINTF -o switch tools/switch_gsw.c -DCONFIG_RALINK_MT7620
+-	$(CC) $(CFLAGS) -DNEED_PRINTF -o switch tools/switch_gsw.c -DCONFIG_RALINK_MT7620 -L$(TOP)/libutils -lshutils -L$(TOP)/nvram -lnvram
++	$(CC) $(CFLAGS) -DCONFIG_RALINK_MT7621 -I$(LINUXDIR)/drivers/net/ethernet/raeth -DNEED_PRINTF -o switch tools/switch_gsw.c -DCONFIG_RALINK_MT7620 -L$(TOP)/libutils -lshutils -L$(TOP)/nvram -lnvram
  ifeq ($(CONFIG_E1700),y)
- 	$(CC) $(CFLAGS) -DNEED_PRINTF -o switch tools/switch_7530.c -DCONFIG_RALINK_MT7620
+ 	$(CC) $(CFLAGS) -DNEED_PRINTF -o switch tools/switch_7530.c -DCONFIG_RALINK_MT7620 -L$(TOP)/libutils -lshutils -L$(TOP)/nvram -lnvram
  endif
-@@ -1968,7 +1971,7 @@
  else
- 	$(CC) $(CFLAGS) -DNEED_PRINTF -o switch tools/switch.c
+ 	$(CC) $(CFLAGS) -DNEED_PRINTF -o switch tools/switch.c -L$(TOP)/libutils -lshutils -L$(TOP)/nvram -lnvram
  endif
--	$(CC) $(CFLAGS) -DNEED_PRINTF -o mii_mgr tools/mii_mgr.c
+-	$(CC) $(CFLAGS) -DNEED_PRINTF -o mii_mgr tools/mii_mgr.c 
 +	$(CC) $(CFLAGS) -DCONFIG_RALINK_MT7621 -I$(LINUXDIR)/drivers/net/ethernet/raeth -DNEED_PRINTF -o mii_mgr tools/mii_mgr.c
  endif
  #	$(CC) $(CFLAGS) $(LDFLAGS) -DNEED_PRINTF -DTEST -o tools/site_survey_test tools/site_survey_broadcom.c -lnvram

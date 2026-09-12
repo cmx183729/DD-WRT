@@ -16,7 +16,7 @@ Index: src/linux/universal/linux-4.14/drivers/net/wireless/Kconfig.dir882
 +
 +	config FIRST_IF_NONE
 +	bool "None"
-+	
++
 +	config FIRST_IF_MT7615E
 +	bool "MT7615E"
 +	select WIFI_MT_MAC
@@ -88,7 +88,7 @@ Index: src/linux/universal/linux-4.14/drivers/net/wireless/Kconfig.dir882
 +	config FIRST_IF_EPAELNA
 +	bool "ePAeLNA"
 +	config FIRST_IF_IPAILNA
-+	bool "iPAiLNA"		
++	bool "iPAiLNA"
 +	config FIRST_IF_IPAELNA
 +	bool "iPAeLNA"
 +endchoice
@@ -100,7 +100,7 @@ Index: src/linux/universal/linux-4.14/drivers/net/wireless/Kconfig.dir882
 +	config SECOND_IF_EPAELNA
 +	bool "ePAeLNA"
 +	config SECOND_IF_IPAILNA
-+	bool "iPAiLNA"		
++	bool "iPAiLNA"
 +	config SECOND_IF_IPAELNA
 +	bool "iPAeLNA"
 +endchoice
@@ -112,7 +112,7 @@ Index: src/linux/universal/linux-4.14/drivers/net/wireless/Kconfig.dir882
 +	config THIRD_IF_EPAELNA
 +	bool "ePAeLNA"
 +	config THIRD_IF_IPAILNA
-+	bool "iPAiLNA"		
++	bool "iPAiLNA"
 +	config THIRD_IF_IPAELNA
 +	bool "iPAeLNA"
 +endchoice

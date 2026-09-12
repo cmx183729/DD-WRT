@@ -1,8 +1,8 @@
 Index: src/router/services/sysinit/defaults.c
 ===================================================================
---- src/router/services/sysinit/defaults.c	(revision 53494)
+--- src/router/services/sysinit/defaults.c	(revision HEAD)
 +++ src/router/services/sysinit/defaults.c	(working copy)
-@@ -138,7 +138,7 @@
+@@ -136,7 +136,7 @@ struct nvram_param srouter_defaults[] = {
  #elif HAVE_CARLSONWIRELESS
  	{ "time_zone", "Etc/Zulu" },
  #else
@@ -11,7 +11,7 @@ Index: src/router/services/sysinit/defaults.c
  #endif
  #ifdef HAVE_SKYTRON
  	{ "ntp_server", "ntp0.fau.de" },	/* NTP server *//* Modify */
-@@ -299,7 +299,7 @@
+@@ -292,7 +292,7 @@ struct nvram_param srouter_defaults[] = {
  #endif
  	{ "lan_proto", "static" },
  #else
@@ -20,16 +20,14 @@ Index: src/router/services/sysinit/defaults.c
  #endif
  	{ "lan_netmask", "255.255.255.0" },	/* LAN netmask */
  	{ "lan_gateway", "0.0.0.0" },	/* LAN gateway */
-@@ -703,7 +703,7 @@
+@@ -712,5 +712,5 @@ struct nvram_param srouter_defaults[] = {
  #elif HAVE_NDTRADE
  	{ "dhcp_start", "192.168.100.30" },	/* First assignable DHCP address */
  #else
 -	{ "dhcp_start", "192.168.1.64" },	/* First assignable DHCP address */
 +	{ "dhcp_start", "192.168.2.64" },	/* First assignable DHCP address */
  #endif
- 	// { "dhcp_end", "150", 0 }, /* Last assignable DHCP address */ /* Remove 
- 	// 
-@@ -827,8 +827,8 @@
+@@ -833,8 +833,8 @@ struct nvram_param srouter_defaults[] = {
  	{ "wl0_nbw_cap", "1" },
  	{ "wl1_nbw_cap", "1" },
  	{ "wl2_nbw_cap", "1" },
@@ -40,7 +38,7 @@ Index: src/router/services/sysinit/defaults.c
  	{ "wl2_nbw", "20" },	/* N-BW */
  	{ "wl0_bw_cap", "255" },	/* N-BW */
  	{ "wl1_bw_cap", "255" },	/* N-BW */
-@@ -1524,9 +1524,9 @@
+@@ -1530,9 +1530,9 @@ struct nvram_param srouter_defaults[] = {
  #else
  	{ "wl_net_mode", "mixed" },	/* Wireless mode
  					 * (mixed|g-only|b-only|disable) */
@@ -52,7 +50,7 @@ Index: src/router/services/sysinit/defaults.c
  	{ "wl2_net_mode", "mixed" },
  #endif
  
-@@ -2315,7 +2315,7 @@
+@@ -2368,7 +2368,7 @@ struct nvram_param srouter_defaults[] = {
  #else
  	{ "pptp_encrypt", "0" },
  #endif
@@ -61,7 +59,7 @@ Index: src/router/services/sysinit/defaults.c
  
  #ifdef HAVE_SKYTRON
  	{ "telnetd_enable", "0" },
-@@ -2332,7 +2332,7 @@
+@@ -2385,7 +2385,7 @@ struct nvram_param srouter_defaults[] = {
  #elif defined(HAVE_NDTRADE)
  	{ "telnetd_enable", "0" },
  #else
@@ -70,7 +68,7 @@ Index: src/router/services/sysinit/defaults.c
  #endif
  #ifdef HAVE_IPV6
  	{ "ipv6_enable", "0" },
-@@ -2422,7 +2422,7 @@
+@@ -2463,7 +2463,7 @@ struct nvram_param srouter_defaults[] = {
  #elif HAVE_IDEXX
  	{ "sshd_enable", "1" },
  #else
@@ -79,7 +77,7 @@ Index: src/router/services/sysinit/defaults.c
  #endif
  	{ "sshd_forwarding", "0" },
  	{ "sshd_port", "22" },
-@@ -2459,11 +2459,11 @@
+@@ -2485,11 +2485,11 @@ struct nvram_param srouter_defaults[] = {
  #endif				/* micro build - use telnet remote mgmt */
  	{ "remote_mgt_telnet", "0" },
  	{ "telnet_wanport", "23" },	/* WAN port to listen on */
@@ -93,7 +91,7 @@ Index: src/router/services/sysinit/defaults.c
  	{ "syslogd_rem_ip", "" },
  	{ "sshd_replace", "0" },
  
-@@ -2828,7 +2828,7 @@
+@@ -2854,7 +2854,7 @@ struct nvram_param srouter_defaults[] = {
  #elif defined(DEFAULT_LANGUAGE)
  	{ "language", DEFAULT_LANGUAGE },
  #else
@@ -102,21 +100,12 @@ Index: src/router/services/sysinit/defaults.c
  #endif
  	{ "macupd_ip", "0.0.0.0" },
  	{ "macupd_port", "2056" },
-@@ -2885,7 +2885,7 @@
- #elif HAVE_MICRO
- 	{ "ip_conntrack_max", "1024" },
- #else
--	{ "ip_conntrack_max", "4096" },
-+	{ "ip_conntrack_max", "32768" },
- #endif
- #ifdef HAVE_80211AC
- #ifndef HAVE_BUFFALO
 Index: src/router/services/sysinit/sysinit.c
 ===================================================================
---- src/router/services/sysinit/sysinit.c	(revision 53494)
+--- src/router/services/sysinit/sysinit.c	(revision HEAD)
 +++ src/router/services/sysinit/sysinit.c	(working copy)
-@@ -2477,7 +2477,7 @@
- #endif
+@@ -2304,7 +2304,7 @@ void start_restore_defaults(void)
+ 	#endif
  		nvram_set("lan_proto", "static");
  #else
 -		nvram_set("lan_ipaddr", "192.168.1.1");

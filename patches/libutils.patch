@@ -1,10 +1,8 @@
 Index: src/router/libutils/Makefile
 ===================================================================
---- src/router/libutils/Makefile	(revision 53494)
+--- src/router/libutils/Makefile	(revision HEAD)
 +++ src/router/libutils/Makefile	(working copy)
-@@ -157,9 +157,9 @@
- OBJS += $(TOP)/register/register_regulatory.o
- endif
+@@ -403,7 +403,7 @@
  ifeq ($(CONFIG_MADWIFI),y)
 -SHOBJS += $(TOP)/register/register_check.o
 -WOBJS += $(TOP)/register/register_wifi.o
@@ -17,12 +15,26 @@ Index: src/router/libutils/Makefile
  #OBJS += libutils/getifaddrs.o
 Index: src/router/libutils/libshutils/shutils.c
 ===================================================================
---- src/router/libutils/libshutils/shutils.c	(revision 53494)
+--- src/router/libutils/libshutils/shutils.c	(revision HEAD)
 +++ src/router/libutils/libshutils/shutils.c	(working copy)
-@@ -1784,3 +1784,6 @@
+@@ -2215,5 +2215,20 @@
+ char *getgptpartitionbyname(const char *dev, const char *name)
+ {
+ 	static char retname[128];
+ 	return getgptpartitionbyname_safe(retname, dev, name);;
  }
- 
- #endif
-+char *hostapd_eap_get_types (void) { return ""; }
-+void adjust_regulatory (int count) {}
-+int registered_has_subquarter (void) {return 0;}
++
++char *hostapd_eap_get_types(void)
++{
++	return "";
++}
++
++void adjust_regulatory(int count)
++{
++	(void)count;
++}
++
++int registered_has_subquarter(void)
++{
++	return 0;
++}

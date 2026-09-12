@@ -1,6 +1,8 @@
 name: build
 
-on: 
+on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       revision:
@@ -15,71 +17,110 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
     strategy:
       matrix:
         profile: [k2p-mt76, k2p-mini, k2p, dir-882-a1, dir-882-r1]
     steps:
-      - uses: actions/checkout@v3
-      - uses: hendrikmuhs/ccache-action@v1.2
-        with:
-          key: ${{ matrix.profile }}
+      - uses: actions/checkout@v7
       - name: Install packages
         run: |
-          sudo apt update
-          sudo apt install unzip libtool-bin ccache curl cmake gperf gawk flex bison nano xxd \
-            fakeroot kmod cpio bc zip git python3-docutils gettext gengetopt gtk-doc-tools \
-            autoconf-archive automake autopoint meson texinfo build-essential help2man pkg-config \
-            zlib1g-dev libgmp3-dev libmpc-dev libmpfr-dev libncurses5-dev libltdl-dev wget libc-dev-bin
-      - uses: actions/setup-node@v3
+          sudo apt-get update
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            autoconf-archive automake autopoint bc bison build-essential bzip2 ca-certificates \
+            ccache cmake cpio curl fakeroot file flex gawk gengetopt gettext git gperf gzip \
+            gtk-doc-tools help2man kmod libc-dev-bin libgmp-dev libltdl-dev libmpc-dev \
+            libmpfr-dev libncurses-dev libtool-bin meson nano ninja-build patch perl pkg-config \
+            python-is-python3 python3 python3-docutils rsync subversion tar texinfo unzip wget xxd \
+            xz-utils zip zlib1g-dev
+      - uses: hendrikmuhs/ccache-action@v1.2.24
         with:
-          node-version: 18
-          check-latest: true
-      - name: Install npm packages
-        run: sudo npm install -g uglify-js uglifycss
-      - uses: robinraju/release-downloader@v1.8
+          key: ${{ matrix.profile }}
+          install: no
+      - uses: actions/setup-node@v7
         with:
-          repository: tsl0922/DD-WRT
-          tag: toolchain
-          fileName: toolchain-mipsel_24kc_gcc-13.1.0_musl.tar.gz
-      - name: Extract toolchain
-        run: tar zxf toolchain-mipsel_24kc_gcc-13.1.0_musl.tar.gz
+          node-version: '24'
+          check-latest: false
+          package-manager-cache: false
+      - name: Install frontend minifiers
+        shell: bash
+        run: |
+          set -euo pipefail
+          tool_prefix="$RUNNER_TEMP/ddwrt-npm-tools"
+          npm install --prefix "$tool_prefix" --no-save --package-lock=false --no-audit --no-fund \
+            --ignore-scripts uglify-js@3.19.3 uglifycss@0.0.29
+          ln -sf "$tool_prefix/node_modules/.bin/uglifyjs" "$GITHUB_WORKSPACE/tools/uglifyjs"
+          ln -sf "$tool_prefix/node_modules/.bin/uglifycss" "$GITHUB_WORKSPACE/tools/uglifycss"
+          ln -sf "$(command -v node)" "$GITHUB_WORKSPACE/tools/node"
+          test -x "$GITHUB_WORKSPACE/tools/uglifyjs"
+          test -x "$GITHUB_WORKSPACE/tools/uglifycss"
+          test -x "$GITHUB_WORKSPACE/tools/node"
+          PATH="$GITHUB_WORKSPACE/tools:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+          export PATH
+          printf 'var x = 1;\n' | uglifyjs > /dev/null
+          printf 'a { color: red; }\n' | uglifycss > /dev/null
       - name: Prepare
         run: |
           echo PROFILE=${{ matrix.profile }} > .config
-          echo REVISION=${{ github.event.inputs.revision }} >> .config
+          echo REVISION=${{ inputs.revision || 'HEAD' }} >> .config
           make checkout
           make prepare
       - name: Configure
         run: make configure
       - name: Build
         run: make all
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v7
         with:
-          name: images
+          name: images-${{ matrix.profile }}
           path: images/*.bin
+          if-no-files-found: error
   publish:
     needs: [build]
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
     if: ${{ github.event_name == 'schedule' || inputs.publish }}
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/download-artifact@v3
-      - name: Set Tag Name
-        run: echo "TAG_ANME=$(date +%Y%m%d)" >> $GITHUB_ENV
-      - uses: rickstaa/action-create-tag@v1
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
-          tag: ${{ env.TAG_ANME }}
+          pattern: images-*
+          path: release-images
+          merge-multiple: false
+      - name: Set Tag Name
+        run: echo "TAG_NAME=$(date +%Y%m%d)" >> $GITHUB_ENV
+      - uses: rickstaa/action-create-tag@v1.7.2
+        with:
+          tag: ${{ env.TAG_NAME }}
           force_push_tag: true
-      - uses: ncipollo/release-action@v1
+      - uses: ncipollo/release-action@v1.21.0
         with:
           commit: ${{ github.sha }}
-          tag: ${{ env.TAG_ANME }}
-          artifacts: "images/*.bin"
+          tag: ${{ env.TAG_NAME }}
+          artifacts: "release-images/**/*.bin"
           allowUpdates: true
-      - uses: dev-drprasad/delete-older-releases@v0.2.1
+      - name: Delete older releases
+        uses: actions/github-script@v8
         with:
-          keep_latest: 7
-          delete_tags: true
-          delete_tag_pattern: "20"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const releases = await github.paginate(
+              github.rest.repos.listReleases, { owner, repo, per_page: 100 }
+            );
+            const obsolete = releases
+              .filter(({ tag_name }) => tag_name.includes('20'))
+              .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+              .slice(7);
+            for (const release of obsolete) {
+              await github.rest.repos.deleteRelease({
+                owner, repo, release_id: release.id
+              });
+              try {
+                await github.rest.git.deleteRef({
+                  owner, repo, ref: `tags/${release.tag_name}`
+                });
+              } catch (error) {
+                if (error.status !== 404) throw error;
+              }
+            }

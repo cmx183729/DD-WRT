@@ -1,8 +1,8 @@
 Index: src/router/libutils/libutils/detect.c
 ===================================================================
---- src/router/libutils/libutils/detect.c	(revision 53494)
+--- src/router/libutils/libutils/detect.c	(revision HEAD)
 +++ src/router/libutils/libutils/detect.c	(working copy)
-@@ -1101,7 +1101,7 @@
+@@ -1408,7 +1408,7 @@ old_way:;
  			return ROUTER_DIR882;
  		}
  		if (!memcmp(sign, "DIR_878", 7)) {
@@ -13,9 +13,9 @@ Index: src/router/libutils/libutils/detect.c
  	}
 Index: src/router/libutils/libutils/gpio.c
 ===================================================================
---- src/router/libutils/libutils/gpio.c	(revision 53494)
+--- src/router/libutils/libutils/gpio.c	(revision HEAD)
 +++ src/router/libutils/libutils/gpio.c	(working copy)
-@@ -1116,6 +1116,25 @@
+@@ -1238,6 +1238,25 @@ int gpio_write_bit(int gpio, int setvalue)
  
  void set_gpio(int pin, int value)
  {
@@ -41,7 +41,7 @@ Index: src/router/libutils/libutils/gpio.c
  	if (pin > 95) {
  		set_linux_gpio(pin, value);
  	} else {
-@@ -1126,6 +1145,9 @@
+@@ -1248,6 +1267,9 @@ void set_gpio(int pin, int value)
  
  int get_gpio(int pin)
  {
@@ -53,9 +53,9 @@ Index: src/router/libutils/libutils/gpio.c
  		get_linux_gpio(pin);
 Index: src/router/libutils/libutils/ledconfig.c
 ===================================================================
---- src/router/libutils/libutils/ledconfig.c	(revision 53494)
+--- src/router/libutils/libutils/ledconfig.c	(revision HEAD)
 +++ src/router/libutils/libutils/ledconfig.c	(working copy)
-@@ -598,12 +598,9 @@
+@@ -643,12 +643,9 @@ static void getledconfig(struct ledconfig *cfg)
  		cfg->usb_power = 0xa;
  		break;
  	case ROUTER_DIR882:
@@ -73,18 +73,18 @@ Index: src/router/libutils/libutils/ledconfig.c
  		cfg->power_gpio = GPIO_LOW | 0xf;
 Index: src/router/rc/resetbutton.c
 ===================================================================
---- src/router/rc/resetbutton.c	(revision 53494)
+--- src/router/rc/resetbutton.c	(revision HEAD)
 +++ src/router/rc/resetbutton.c	(working copy)
-@@ -809,7 +809,7 @@
+@@ -903,7 +903,7 @@ static void service_restart(void)
+ 
  static void handle_reset(void)
  {
- 
 -	if ((brand & 0x000f) != 0x000f) {
 +	if ((brand & 0x000ff) != 0x000ff) {
- 		dd_loginfo("resetbutton", "factory default.\n");
- #if !defined(HAVE_XSCALE) && !defined(HAVE_MAGICBOX) && !defined(HAVE_FONERA) && !defined(HAVE_WHRAG108) && !defined(HAVE_GATEWORX) && !defined(HAVE_LS2) && !defined(HAVE_CA8) && !defined(HAVE_TW6600) && !defined(HAVE_LS5) && !defined(HAVE_LSX) && !defined(HAVE_SOLO51)
- 		led_control(LED_DIAG, LED_ON);
-@@ -1124,7 +1124,7 @@
+ 		fprintf(stderr, "Reset to factory defaults\n");
+ 		dd_loginfo("resetbutton", "factory default.");
+ #if !defined(HAVE_XSCALE) && !defined(HAVE_MAGICBOX) && !defined(HAVE_FONERA) && !defined(HAVE_WHRAG108) &&                   \
+@@ -1219,7 +1219,7 @@ static void resetbtn_period_check(int sig)
  		val = (get_gpio(7) << 7) | (get_gpio(18) << 18);
  		break;
  	case ROUTER_DIR882:
@@ -93,7 +93,7 @@ Index: src/router/rc/resetbutton.c
  		break;
  	case ROUTER_R6800:
  		val = (get_gpio(18) << 18) | (get_gpio(12) << 12) | (get_gpio(14) << 14);
-@@ -1477,9 +1477,6 @@
+@@ -1630,9 +1630,6 @@ static void resetbtn_period_check(int sig)
  	case ROUTER_TPLINK_ARCHERC3150:
  		sesgpio = 0x103;
  		break;
