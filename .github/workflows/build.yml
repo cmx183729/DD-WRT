@@ -32,8 +32,15 @@ jobs:
             ccache cmake cpio curl fakeroot file flex gawk gengetopt gettext git gperf gzip \
             gtk-doc-tools help2man kmod libc-dev-bin libgmp-dev libltdl-dev libmpc-dev \
             libmpfr-dev libncurses-dev libtool-bin meson nano ninja-build patch perl pkg-config \
-            python-is-python3 python3 python3-docutils rsync subversion tar texinfo unzip wget xxd \
+            python-is-python3 python3 python3-docutils python3-pip rsync subversion tar texinfo unzip wget xxd \
             xz-utils zip zlib1g-dev
+          # Ubuntu 22.04 ships Meson 0.61, while current GLib needs Meson >= 1.4.
+          # Install modern user-local build tools and expose them to all later steps.
+          python3 -m pip install --user --upgrade "meson>=1.4.0" ninja cmake
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/meson" --version
+          "$HOME/.local/bin/ninja" --version
+          "$HOME/.local/bin/cmake" --version
       - uses: hendrikmuhs/ccache-action@v1.2.24
         with:
           key: ${{ matrix.profile }}
