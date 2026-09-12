@@ -155,7 +155,7 @@ Index: src/router/rules/util-linux.mk
  util-linux-clean:
  	make -C util-linux clean
  
- util-linux: ncurses
+ util-linux: util-linux-configure
 -	make -C util-linux
 +	make -C util-linux -j4
  
