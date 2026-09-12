@@ -85,7 +85,12 @@ void start_sysinit(void)
 	eval("ifconfig", "eth2", "up");
 	eval("ifconfig", "eth3", "up");
 
-	eval("mtk_esw", "64", "0x401e", "0x10001");
+	/*
+	 * cmd 64 packs VLAN member ports in bits 0..15 and untagged
+	 * egress ports in bits 16..31.  Keep CPU-LAN P6 tagged for
+	 * eth2.1, but emit untagged VLAN 1 frames on the LAN PHYs.
+	 */
+	eval("mtk_esw", "64", "0x1e401e", "0x10001");
 	eval("mtk_esw", "64", "0x18001", "0x20002");
 
 	eval("vconfig", "set_name_type", "VLAN_PLUS_VID_NO_PAD");

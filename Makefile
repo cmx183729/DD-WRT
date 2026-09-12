@@ -63,6 +63,11 @@ define VerifyLibpcapFixes
 	@grep -Fq '  #ifndef _GNU_SOURCE' "$(BUILD_DIR)/libpcap/ftmacros.h" || { echo "libpcap ftmacros _GNU_SOURCE guard was not applied" >&2; exit 1; }
 endef
 
+define VerifyWolfsslArchiveFix
+	@grep -Fq 'WOLFSSL_AR_FLAGS := cru' "$(BUILD_DIR)/rules/wolfssl.mk" || { echo "wolfSSL archive flags patch was not applied" >&2; exit 1; }
+	@grep -Fq 'AR="$$(WOLFSSL_AR)"' "$(BUILD_DIR)/rules/wolfssl.mk" || { echo "wolfSSL LTO-aware archiver patch was not applied" >&2; exit 1; }
+endef
+
 define VerifyRebasedPatches
 	@grep -Fq '#if defined(HAVE_MICRO) || !defined(HAVE_PPTPD)' "$(BUILD_DIR)/httpd/visuals/menu.c" || { echo "httpd menu patch was not applied" >&2; exit 1; }
 	@grep -Fq '#if defined(HAVE_SANSFIL) || !defined(HAVE_HOTSPOT)' "$(BUILD_DIR)/httpd/visuals/menu.c" || { echo "httpd hotspot menu patch was not applied" >&2; exit 1; }
@@ -123,6 +128,7 @@ prepare: toolchain
 	$(call PatchDir,$(TOP_DIR)/patches)
 	$(call VerifyRebasedPatches)
 	$(call VerifyLibpcapFixes)
+	$(call VerifyWolfsslArchiveFix)
 	$(call PatchDir,$(TOP_DIR)/patches/$(BOARD))
 ifneq (,$(findstring mt76,$(PROFILE)))
 	$(call PatchDir,$(TOP_DIR)/patches/mt76)
