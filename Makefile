@@ -110,7 +110,20 @@ define InjectCMakeDependencyPaths
 		ubus="$$rules/ubus.mk"; \
 		if [ -f "$$ubus" ] && grep -Fq 'ubus-configure:' "$$ubus" && ! grep -Fq 'DDWRT_UBUS_CONFIG_DEPS' "$$ubus"; then \
 			sed -i '/^ubus-configure:/i ubus-configure: json-c libubox-configure libubox # DDWRT_UBUS_CONFIG_DEPS' "$$ubus"; \
-		fi
+		fi; \
+		inject_libnltiny_dependency() { \
+			rule="$$1"; target="$$2"; path="$$rules/$$rule"; marker="DDWRT_LIBNLTINY_DEPS_$$target"; \
+			[ -f "$$path" ] || return 0; \
+			grep -Fq 'libnl-tiny' "$$path" || return 0; \
+			grep -Fq "$$target:" "$$path" || return 0; \
+			if grep -Fq "$$marker" "$$path" || grep -Fq "$$target: libnltiny" "$$path"; then return 0; fi; \
+			sed -i "/^$$target:/i $$target: libnltiny # $$marker" "$$path"; \
+		}; \
+		inject_libnltiny_dependency usteer.mk usteer-configure; \
+		inject_libnltiny_dependency usteer.mk usteer; \
+		inject_libnltiny_dependency cfm.mk cfm-configure; \
+		inject_libnltiny_dependency cfm.mk cfm; \
+		inject_libnltiny_dependency batman-adv.mk batman-adv
 endef
 
 all:
