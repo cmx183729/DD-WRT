@@ -123,7 +123,15 @@ define InjectCMakeDependencyPaths
 		inject_libnltiny_dependency usteer.mk usteer; \
 		inject_libnltiny_dependency cfm.mk cfm-configure; \
 		inject_libnltiny_dependency cfm.mk cfm; \
-		inject_libnltiny_dependency batman-adv.mk batman-adv
+		inject_libnltiny_dependency batman-adv.mk batman-adv; \
+		nft="$$rules/nftables.mk"; \
+		if [ -f "$$nft" ] && grep -Fq 'libnftnl-configure:' "$$nft" && \
+			grep -Fq 'CFLAGS="' "$$nft" && ! grep -Fq 'DDWRT_LIBNFTNL_KERNEL_HEADERS' "$$nft"; then \
+			sed -i '/^libnftnl-configure:/i # DDWRT_LIBNFTNL_KERNEL_HEADERS' "$$nft"; \
+			sed -i "/^libnftnl-configure:/,/^libnftnl:/ s|CFLAGS=\"|CPPFLAGS=\"-I\$$(LINUXDIR)/include/uapi -I\$$(LINUXDIR)/include \" CFLAGS=\"|" "$$nft"; \
+			sed -i '/^libnftnl-configure:/i libnftnl-configure: libmnl # DDWRT_LIBNFTNL_DEPS' "$$nft"; \
+			sed -i '/^libnftnl:/i libnftnl: libmnl # DDWRT_LIBNFTNL_DEPS' "$$nft"; \
+		fi
 endef
 
 all:
