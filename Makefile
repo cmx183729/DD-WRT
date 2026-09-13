@@ -138,9 +138,9 @@ define InjectCMakeDependencyPaths
 			sed -n "$$range p" "$$path" | grep -Fq './configure' || return 0; \
 			if sed -n "$$range p" "$$path" | grep -Fq -- '-I$$(LINUXDIR)/include/uapi'; then return 0; fi; \
 			if sed -n "$$range p" "$$path" | grep -Eq '(^|[[:space:]])CPPFLAGS="'; then \
-				sed -i -E "$$range s|(^|[[:space:]])CPPFLAGS=\"|\\1CPPFLAGS=\"-I\$$(LINUXDIR)/arch/mips/include/uapi -I\$$(LINUXDIR)/include/uapi -I\$$(LINUXDIR)/include |" "$$path"; \
+				sed -i -E "$$range s@(^|[[:space:]])CPPFLAGS=\"@\\1CPPFLAGS=\"-I\$$(LINUXDIR)/arch/mips/include/uapi -I\$$(LINUXDIR)/include/uapi -I\$$(LINUXDIR)/include @" "$$path"; \
 			elif sed -n "$$range p" "$$path" | grep -Eq '(^|[[:space:]])CFLAGS="'; then \
-				sed -i -E "$$range s|(^|[[:space:]])CFLAGS=\"|\\1CPPFLAGS=\"-I\$$(LINUXDIR)/arch/mips/include/uapi -I\$$(LINUXDIR)/include/uapi -I\$$(LINUXDIR)/include \" CFLAGS=\"|" "$$path"; \
+				sed -i -E "$$range s@(^|[[:space:]])CFLAGS=\"@\\1CPPFLAGS=\"-I\$$(LINUXDIR)/arch/mips/include/uapi -I\$$(LINUXDIR)/include/uapi -I\$$(LINUXDIR)/include \" CFLAGS=\"@" "$$path"; \
 			else \
 				sed -i "$$range s|\\./configure|CPPFLAGS=\"-I\$$(LINUXDIR)/arch/mips/include/uapi -I\$$(LINUXDIR)/include/uapi -I\$$(LINUXDIR)/include \" ./configure|" "$$path"; \
 			fi; \
@@ -178,7 +178,7 @@ define InjectCMakeDependencyPaths
 		nft="$$rules/nftables.mk"; \
 		if [ -f "$$nft" ] && grep -Fq 'libnftnl-configure:' "$$nft" && \
 			grep -Eq '^[[:space:]]*CFLAGS="' "$$nft" && ! grep -Fq 'DDWRT_LIBNFTNL_KERNEL_HEADERS' "$$nft"; then \
-			sed -i -E "/^libnftnl-configure:/,/^libnftnl:/ s|(^|[[:space:]])CFLAGS=\"|\\1CPPFLAGS=\"-I\$$(LINUXDIR)/arch/mips/include/uapi -I\$$(LINUXDIR)/include/uapi -I\$$(LINUXDIR)/include \" CFLAGS=\"|" "$$nft"; \
+			sed -i -E "/^libnftnl-configure:/,/^libnftnl:/ s@(^|[[:space:]])CFLAGS=\"@\\1CPPFLAGS=\"-I\$$(LINUXDIR)/arch/mips/include/uapi -I\$$(LINUXDIR)/include/uapi -I\$$(LINUXDIR)/include \" CFLAGS=\"@" "$$nft"; \
 			grep -Fq 'CPPFLAGS="-I$$(LINUXDIR)/arch/mips/include/uapi -I$$(LINUXDIR)/include/uapi' "$$nft" || { echo "libnftnl kernel UAPI header injection failed" >&2; exit 1; }; \
 			sed -i '/^libnftnl-configure:/i # DDWRT_LIBNFTNL_KERNEL_HEADERS' "$$nft"; \
 			sed -i '/^libnftnl-configure:/i libnftnl-configure: libmnl # DDWRT_LIBNFTNL_DEPS' "$$nft"; \
