@@ -131,6 +131,10 @@ define InjectCMakeDependencyPaths
 			sed -i "/^libnftnl-configure:/,/^libnftnl:/ s|CFLAGS=\"|CPPFLAGS=\"-I\$$(LINUXDIR)/include/uapi -I\$$(LINUXDIR)/include \" CFLAGS=\"|" "$$nft"; \
 			sed -i '/^libnftnl-configure:/i libnftnl-configure: libmnl # DDWRT_LIBNFTNL_DEPS' "$$nft"; \
 			sed -i '/^libnftnl:/i libnftnl: libmnl # DDWRT_LIBNFTNL_DEPS' "$$nft"; \
+		fi; \
+		if [ -f "$$nft" ] && grep -Fq 'libnftnl-configure:' "$$nft" && \
+			grep -Fq 'LIBMNL_CPPFLAGS' "$$nft"; then \
+			sed -i '/^libnftnl-configure:/,/^libnftnl:/ s/LIBMNL_CPPFLAGS/LIBMNL_CFLAGS/g' "$$nft"; \
 		fi
 endef
 
