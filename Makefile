@@ -77,6 +77,42 @@ define VerifyRebasedPatches
 	@grep -Fq 'fakespace=errnos_' "$(BUILD_DIR)/vpnc/libgpg-error/src/Makefile.am" || { echo "libgpg-error awk compatibility is missing upstream" >&2; exit 1; }
 endef
 
+define InjectCMakeDependencyPaths
+	@set -eu; \
+		rules="$(BUILD_DIR)/rules"; \
+		inject_cmake_paths() { \
+			rule="$$1"; target="$$2"; option_var="$$3"; path="$$rules/$$rule"; \
+			[ -f "$$path" ] || return 0; \
+			grep -Fq "$$target:" "$$path" || return 0; \
+			grep -Fq '$$(call CMakeConfigure' "$$path" || return 0; \
+			if grep -Fq 'DDWRT_LIBUBOX_CMAKE_PATHS' "$$path"; then return 0; fi; \
+			sed -i "/^$$target:/i $$option_var += -Dubox_include_dir=\$$(TOP) -Dblobmsg_json_include_dir=\$$(TOP) -Djson_include_dir=\$$(TOP)/_staging/usr/include -DCMAKE_PREFIX_PATH=\$$(TOP)/_staging/usr -DCMAKE_INCLUDE_PATH=\$$(TOP) -DCMAKE_LIBRARY_PATH=\$$(TOP)/libubox # DDWRT_LIBUBOX_CMAKE_PATHS" "$$path"; \
+		}; \
+		inject_cmake_paths libubox.mk libubox-configure UBOX_CMAKE_OPTIONS; \
+		inject_cmake_paths ubus.mk ubus-configure UBUS_CMAKE_OPTIONS; \
+		inject_cmake_paths uqmi.mk uqmi-configure UQMI_CMAKE_OPTIONS; \
+		inject_cmake_paths usteer.mk usteer-configure USTEER_CMAKE_OPTIONS; \
+		inject_cmake_paths dawn.mk dawn-configure DAWN_CMAKE_OPTIONS; \
+		inject_cmake_paths uci.mk uci-configure UCI_CMAKE_OPTIONS; \
+		inject_cmake_paths rpcd.mk rpcd-configure RPCD_CMAKE_OPTIONS; \
+		inject_cmake_paths uhttpd.mk uhttpd-configure UHTTPD_CMAKE_OPTIONS; \
+		inject_cmake_paths ustream-ssl.mk ustream-ssl-configure USTREAM_SSL_CMAKE_OPTIONS; \
+		inject_cmake_paths ustream.mk ustream-configure USTREAM_CMAKE_OPTIONS; \
+		inject_cmake_paths procd.mk procd-configure PROCD_CMAKE_OPTIONS; \
+		inject_cmake_paths fstools.mk fstools-configure FSTOOLS_CMAKE_OPTIONS; \
+		inject_cmake_paths netifd.mk netifd-configure NETIFD_CMAKE_OPTIONS; \
+		inject_cmake_paths odhcpd.mk odhcpd-configure ODHCPD_CMAKE_OPTIONS; \
+		inject_cmake_paths jshn.mk jshn-configure JSHN_CMAKE_OPTIONS; \
+		ubox="$$rules/libubox.mk"; \
+		if [ -f "$$ubox" ] && grep -Fq 'libubox-configure:' "$$ubox" && ! grep -Fq 'DDWRT_LIBUBOX_CONFIG_DEPS' "$$ubox"; then \
+			sed -i '/^libubox-configure:/i libubox-configure: json-c # DDWRT_LIBUBOX_CONFIG_DEPS' "$$ubox"; \
+		fi; \
+		ubus="$$rules/ubus.mk"; \
+		if [ -f "$$ubus" ] && grep -Fq 'ubus-configure:' "$$ubus" && ! grep -Fq 'DDWRT_UBUS_CONFIG_DEPS' "$$ubus"; then \
+			sed -i '/^ubus-configure:/i ubus-configure: json-c libubox-configure libubox # DDWRT_UBUS_CONFIG_DEPS' "$$ubus"; \
+		fi
+endef
+
 all:
 	$(MAKE_ROUTER) kernel
 	$(MAKE_ROUTER) all
@@ -151,6 +187,7 @@ endif
 	ln -sf ../../opt $(BUILD_DIR)/opt
 	cp $(LINUX_DIR)/drivers/net/wireless/Kconfig.dir882 $(LINUX_DIR)/drivers/net/wireless/Kconfig
 
+	$(call InjectCMakeDependencyPaths)
 	python3 "$(TOP_DIR)/tools/fix-ar-flags.py" "$(BUILD_DIR)/rules" "$(BUILD_DIR)/Makefile.mt7621"
 	$(MAKE_ROUTER) gen_revision
 
