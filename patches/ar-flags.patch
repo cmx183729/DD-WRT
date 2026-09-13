@@ -1,0 +1,58 @@
+Index: src/router/rules/iptables-new.mk
+===================================================================
+--- src/router/rules/iptables-new.mk
++++ src/router/rules/iptables-new.mk
+@@ -8 +8 @@
+-	AR_FLAGS="\"cru $(LTOPLUGIN)\"" \
++	AR_FLAGS="cru $(LTOPLUGIN)" \
+@@ -19 +19 @@
+-	AR_FLAGS="\"cru $(LTOPLUGIN)\"" \
++	AR_FLAGS="cru $(LTOPLUGIN)" \
+Index: src/router/rules/avahi.mk
+===================================================================
+--- src/router/rules/avahi.mk
++++ src/router/rules/avahi.mk
+@@ -36 +36 @@
+-	AR_FLAGS="\"cru $(LTOPLUGIN)\"" \
++	AR_FLAGS="cru $(LTOPLUGIN)" \
+@@ -67 +67 @@
+-	AR_FLAGS="\"cru $(LTOPLUGIN)\"" \
++	AR_FLAGS="cru $(LTOPLUGIN)" \
+Index: src/router/rules/bird.mk
+===================================================================
+--- src/router/rules/bird.mk
++++ src/router/rules/bird.mk
+@@ -14 +14 @@
+-	AR_FLAGS="\"cru $(LTOPLUGIN)\"" \
++	AR_FLAGS="cru $(LTOPLUGIN)" \
+Index: src/router/rules/btrfsprogs.mk
+===================================================================
+--- src/router/rules/btrfsprogs.mk
++++ src/router/rules/btrfsprogs.mk
+@@ -7 +7 @@
+-	AR_FLAGS="\"cru $(LTOPLUGIN)\"" \
++	AR_FLAGS="cru $(LTOPLUGIN)" \
+Index: src/router/rules/cfm.mk
+===================================================================
+--- src/router/rules/cfm.mk
++++ src/router/rules/cfm.mk
+@@ -18 +18 @@
+-	AR_FLAGS="\"cru $(LTOPLUGIN)\"" \
++	AR_FLAGS="cru $(LTOPLUGIN)" \
+Index: src/router/rules/chillispot.mk
+===================================================================
+--- src/router/rules/chillispot.mk
++++ src/router/rules/chillispot.mk
+@@ -62 +62 @@
+-	AR_FLAGS="\"cru $(LTOPLUGIN)\"" \
++	AR_FLAGS="cru $(LTOPLUGIN)" \
+@@ -68 +68 @@
+-	AR_FLAGS="\"cru $(LTOPLUGIN)\"" \
++	AR_FLAGS="cru $(LTOPLUGIN)" \
+Index: src/router/rules/chrony.mk
+===================================================================
+--- src/router/rules/chrony.mk
++++ src/router/rules/chrony.mk
+@@ -4 +4 @@
+-	LDFLAGS="$(LDLTO) -ffunction-sections -fdata-sections -Wl,--gc-sections" AR_FLAGS="\"cru $(LTOPLUGIN)\"" \
++	LDFLAGS="$(LDLTO) -ffunction-sections -fdata-sections -Wl,--gc-sections" AR_FLAGS="cru $(LTOPLUGIN)" \
