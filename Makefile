@@ -77,6 +77,7 @@ define VerifyRebasedPatches
 	@grep -Fq 'fakespace=errnos_' "$(BUILD_DIR)/vpnc/libgpg-error/src/Makefile.am" || { echo "libgpg-error awk compatibility is missing upstream" >&2; exit 1; }
 endef
 
+# Shared by every prepare profile.  Keep every sed program below as one quoted -e argument.
 define InjectCMakeDependencyPaths
 	@set -eu; \
 		rules="$(BUILD_DIR)/rules"; \
@@ -86,7 +87,8 @@ define InjectCMakeDependencyPaths
 			grep -Fq "$$target:" "$$path" || return 0; \
 			grep -Fq '$$(call CMakeConfigure' "$$path" || return 0; \
 			if grep -Fq 'DDWRT_LIBUBOX_CMAKE_PATHS' "$$path"; then return 0; fi; \
-			sed -i "/^$$target:/i $$option_var += -Dubox_include_dir=\$$(TOP) -Dblobmsg_json_include_dir=\$$(TOP) -Djson_include_dir=\$$(TOP)/_staging/usr/include -DCMAKE_PREFIX_PATH=\$$(TOP)/_staging/usr -DCMAKE_INCLUDE_PATH=\$$(TOP) -DCMAKE_LIBRARY_PATH=\$$(TOP)/libubox # DDWRT_LIBUBOX_CMAKE_PATHS" "$$path"; \
+			sed -i -e "/^$$target:/i $$option_var += -Dubox_include_dir=\$$(TOP) -Dblobmsg_json_include_dir=\$$(TOP) -Djson_include_dir=\$$(TOP)/_staging/usr/include -DCMAKE_PREFIX_PATH=\$$(TOP)/_staging/usr -DCMAKE_INCLUDE_PATH=\$$(TOP) -DCMAKE_LIBRARY_PATH=\$$(TOP)/libubox # DDWRT_LIBUBOX_CMAKE_PATHS" -- "$$path"; \
+			grep -Fq 'DDWRT_LIBUBOX_CMAKE_PATHS' "$$path" || { echo "CMake dependency path injection failed: $$rule:$$target" >&2; exit 1; }; \
 		}; \
 		inject_cmake_paths libubox.mk libubox-configure UBOX_CMAKE_OPTIONS; \
 		inject_cmake_paths ubus.mk ubus-configure UBUS_CMAKE_OPTIONS; \
@@ -105,11 +107,11 @@ define InjectCMakeDependencyPaths
 		inject_cmake_paths jshn.mk jshn-configure JSHN_CMAKE_OPTIONS; \
 		ubox="$$rules/libubox.mk"; \
 		if [ -f "$$ubox" ] && grep -Fq 'libubox-configure:' "$$ubox" && ! grep -Fq 'DDWRT_LIBUBOX_CONFIG_DEPS' "$$ubox"; then \
-			sed -i '/^libubox-configure:/i libubox-configure: json-c # DDWRT_LIBUBOX_CONFIG_DEPS' "$$ubox"; \
+			sed -i -e '/^libubox-configure:/i libubox-configure: json-c # DDWRT_LIBUBOX_CONFIG_DEPS' -- "$$ubox"; \
 		fi; \
 		ubus="$$rules/ubus.mk"; \
 		if [ -f "$$ubus" ] && grep -Fq 'ubus-configure:' "$$ubus" && ! grep -Fq 'DDWRT_UBUS_CONFIG_DEPS' "$$ubus"; then \
-			sed -i '/^ubus-configure:/i ubus-configure: json-c libubox-configure libubox # DDWRT_UBUS_CONFIG_DEPS' "$$ubus"; \
+			sed -i -e '/^ubus-configure:/i ubus-configure: json-c libubox-configure libubox # DDWRT_UBUS_CONFIG_DEPS' -- "$$ubus"; \
 		fi; \
 		inject_libnltiny_dependency() { \
 			rule="$$1"; target="$$2"; path="$$rules/$$rule"; marker="DDWRT_LIBNLTINY_DEPS_$$target"; \
@@ -117,7 +119,7 @@ define InjectCMakeDependencyPaths
 			grep -Fq 'libnl-tiny' "$$path" || return 0; \
 			grep -Fq "$$target:" "$$path" || return 0; \
 			if grep -Fq "$$marker" "$$path" || grep -Fq "$$target: libnltiny" "$$path"; then return 0; fi; \
-			sed -i "/^$$target:/i $$target: libnltiny # $$marker" "$$path"; \
+			sed -i -e "/^$$target:/i $$target: libnltiny # $$marker" -- "$$path"; \
 		}; \
 		inject_libnltiny_dependency usteer.mk usteer-configure; \
 		inject_libnltiny_dependency usteer.mk usteer; \
@@ -126,46 +128,45 @@ define InjectCMakeDependencyPaths
 		inject_libnltiny_dependency batman-adv.mk batman-adv; \
 		comgt="$$rules/comgt.mk"; \
 		if [ -f "$$comgt" ] && grep -Fq '$$(MAKE) -C usb_modeswitch configure' "$$comgt" && ! grep -Fq 'DDWRT_COMGT_KERNEL_HEADERS' "$$comgt"; then \
-			sed -i '/^[[:space:]]*\$$(MAKE) -C usb_modeswitch configure[[:space:]]*$$/ s|$$| COPTS="$$(COPTS) -I$$(LINUXDIR)/arch/mips/include/uapi -I$$(LINUXDIR)/include/uapi -I$$(LINUXDIR)/include" # DDWRT_COMGT_KERNEL_HEADERS|' "$$comgt"; \
+			sed -i -e '/^comgt-configure:/i comgt-configure comgt: export COPTS += -I$$(LINUXDIR)/arch/mips/include/uapi -I$$(LINUXDIR)/include/uapi -I$$(LINUXDIR)/include # DDWRT_COMGT_KERNEL_HEADERS' -- "$$comgt"; \
 			grep -Fq 'DDWRT_COMGT_KERNEL_HEADERS' "$$comgt" || { echo "comgt kernel UAPI header injection failed" >&2; exit 1; }; \
 		fi; \
 		inject_kernel_uapi_headers() { \
-			rule="$$1"; target="$$2"; end_target="$$3"; path="$$rules/$$rule"; marker="DDWRT_KERNEL_UAPI_HEADERS_$$target"; \
+			rule="$$1"; target="$$2"; path="$$rules/$$rule"; marker="DDWRT_KERNEL_UAPI_CPPFLAGS_$$target"; \
 			[ -f "$$path" ] || return 0; \
 			grep -Fq "$$target:" "$$path" || return 0; \
-			grep -Fq "$$end_target:" "$$path" || return 0; \
-			range="/^$$target:/,/^$$end_target:/"; \
-			sed -n "$$range p" "$$path" | grep -Fq './configure' || return 0; \
-			if sed -n "$$range p" "$$path" | grep -Fq -- '-I$$(LINUXDIR)/include/uapi'; then return 0; fi; \
-			if sed -n "$$range p" "$$path" | grep -Eq '(^|[[:space:]])CPPFLAGS="'; then \
-				sed -i -E "$$range s@(^|[[:space:]])CPPFLAGS=\"@\\1CPPFLAGS=\"-I\$$(LINUXDIR)/arch/mips/include/uapi -I\$$(LINUXDIR)/include/uapi -I\$$(LINUXDIR)/include @" "$$path"; \
-			elif sed -n "$$range p" "$$path" | grep -Eq '(^|[[:space:]])CFLAGS="'; then \
-				sed -i -E "$$range s@(^|[[:space:]])CFLAGS=\"@\\1CPPFLAGS=\"-I\$$(LINUXDIR)/arch/mips/include/uapi -I\$$(LINUXDIR)/include/uapi -I\$$(LINUXDIR)/include \" CFLAGS=\"@" "$$path"; \
-			else \
-				sed -i "$$range s|\\./configure|CPPFLAGS=\"-I\$$(LINUXDIR)/arch/mips/include/uapi -I\$$(LINUXDIR)/include/uapi -I\$$(LINUXDIR)/include \" ./configure|" "$$path"; \
-			fi; \
-			sed -n "$$range p" "$$path" | grep -Fq -- '-I$$(LINUXDIR)/include/uapi' || { echo "kernel UAPI header injection failed: $$rule:$$target" >&2; exit 1; }; \
-			sed -i "/^$$target:/i # $$marker" "$$path"; \
+			if grep -Fq "$$marker" "$$path"; then return 0; fi; \
+			sed -i -e "/^$$target:/i $$target: export CPPFLAGS += -I\$$(LINUXDIR)/arch/mips/include/uapi -I\$$(LINUXDIR)/include/uapi -I\$$(LINUXDIR)/include # $$marker" -- "$$path"; \
+			grep -Fq "$$marker" "$$path" || { echo "kernel UAPI header injection failed: $$rule:$$target" >&2; exit 1; }; \
 		}; \
-		inject_kernel_uapi_headers libmnl.mk libmnl-configure libmnl-clean; \
-		inject_kernel_uapi_headers libnl.mk libnl-configure libnl; \
-		inject_kernel_uapi_headers libnfnetlink.mk libnfnetlink-configure libnfnetlink; \
-		inject_kernel_uapi_headers libnetfilter_log.mk libnetfilter_log-configure libnetfilter_log; \
-		inject_kernel_uapi_headers libnetfilter_queue.mk libnetfilter_queue-configure libnetfilter_queue; \
-		inject_kernel_uapi_headers nftables.mk nftables-configure nftables; \
-		inject_kernel_uapi_headers iptables-new.mk iptables-new-configure iptables-new-clean; \
-		inject_kernel_uapi_headers ipsec-tools.mk ipsec-tools-configure ipsec-tools-install; \
-		inject_kernel_uapi_headers bird.mk bird-configure bird-clean; \
-		inject_kernel_uapi_headers quagga.mk quagga-configure quagga; \
-		inject_kernel_uapi_headers frr.mk frr-configure frr; \
-		inject_kernel_uapi_headers strongswan.mk strongswan-configure strongswan; \
+		nft="$$rules/nftables.mk"; \
+		if [ -f "$$nft" ] && grep -Fq 'libnftnl-configure:' "$$nft" && ! grep -Fq 'DDWRT_LIBNFTNL_DEPS' "$$nft"; then \
+			sed -i -e '/^libnftnl-configure:/i libnftnl-configure: libmnl # DDWRT_LIBNFTNL_DEPS' -- "$$nft"; \
+			sed -i -e '/^libnftnl:/i libnftnl: libmnl # DDWRT_LIBNFTNL_DEPS' -- "$$nft"; \
+		fi; \
+		if [ -f "$$nft" ] && grep -Fq 'libnftnl-configure:' "$$nft" && grep -Fq 'LIBMNL_CPPFLAGS' "$$nft"; then \
+			sed -i -e 's@LIBMNL_CPPFLAGS=@LIBMNL_CFLAGS=@g' -- "$$nft"; \
+		fi; \
+		inject_kernel_uapi_headers libmnl.mk libmnl-configure; \
+		inject_kernel_uapi_headers libnl.mk libnl-configure; \
+		inject_kernel_uapi_headers libnfnetlink.mk libnfnetlink-configure; \
+		inject_kernel_uapi_headers libnetfilter_log.mk libnetfilter_log-configure; \
+		inject_kernel_uapi_headers libnetfilter_queue.mk libnetfilter_queue-configure; \
+		inject_kernel_uapi_headers nftables.mk libnftnl-configure; \
+		inject_kernel_uapi_headers nftables.mk nftables-configure; \
+		inject_kernel_uapi_headers iptables-new.mk iptables-new-configure; \
+		inject_kernel_uapi_headers ipsec-tools.mk ipsec-tools-configure; \
+		inject_kernel_uapi_headers bird.mk bird-configure; \
+		inject_kernel_uapi_headers quagga.mk quagga-configure; \
+		inject_kernel_uapi_headers frr.mk frr-configure; \
+		inject_kernel_uapi_headers strongswan.mk strongswan-configure; \
 		inject_make_copts_headers() { \
 			rule="$$1"; target="$$2"; path="$$rules/$$rule"; marker="DDWRT_KERNEL_UAPI_COPTS_$$target"; \
 			[ -f "$$path" ] || return 0; \
 			grep -Fq "$$target:" "$$path" || return 0; \
 			grep -Fq ' -C ' "$$path" || return 0; \
 			if grep -Fq "$$marker" "$$path"; then return 0; fi; \
-			sed -i "/^$$target:/i $$target: export COPTS += -I\$$(LINUXDIR)/arch/mips/include/uapi -I\$$(LINUXDIR)/include/uapi -I\$$(LINUXDIR)/include # $$marker" "$$path"; \
+			sed -i -e "/^$$target:/i $$target: export COPTS += -I\$$(LINUXDIR)/arch/mips/include/uapi -I\$$(LINUXDIR)/include/uapi -I\$$(LINUXDIR)/include # $$marker" -- "$$path"; \
 			grep -Fq "$$marker" "$$path" || { echo "kernel UAPI COPTS injection failed: $$rule:$$target" >&2; exit 1; }; \
 		}; \
 		inject_make_copts_headers iproute2.mk iproute2; \
@@ -174,20 +175,7 @@ define InjectCMakeDependencyPaths
 		inject_make_copts_headers pppd.mk pppd; \
 		inject_make_copts_headers xl2tpd.mk xl2tpd-configure; \
 		inject_make_copts_headers batman-adv.mk batman-adv; \
-		inject_make_copts_headers l2tpv3tun.mk l2tpv3tun-configure; \
-		nft="$$rules/nftables.mk"; \
-		if [ -f "$$nft" ] && grep -Fq 'libnftnl-configure:' "$$nft" && \
-			grep -Eq '^[[:space:]]*CFLAGS="' "$$nft" && ! grep -Fq 'DDWRT_LIBNFTNL_KERNEL_HEADERS' "$$nft"; then \
-			sed -i -E "/^libnftnl-configure:/,/^libnftnl:/ s@(^|[[:space:]])CFLAGS=\"@\\1CPPFLAGS=\"-I\$$(LINUXDIR)/arch/mips/include/uapi -I\$$(LINUXDIR)/include/uapi -I\$$(LINUXDIR)/include \" CFLAGS=\"@" "$$nft"; \
-			grep -Fq 'CPPFLAGS="-I$$(LINUXDIR)/arch/mips/include/uapi -I$$(LINUXDIR)/include/uapi' "$$nft" || { echo "libnftnl kernel UAPI header injection failed" >&2; exit 1; }; \
-			sed -i '/^libnftnl-configure:/i # DDWRT_LIBNFTNL_KERNEL_HEADERS' "$$nft"; \
-			sed -i '/^libnftnl-configure:/i libnftnl-configure: libmnl # DDWRT_LIBNFTNL_DEPS' "$$nft"; \
-			sed -i '/^libnftnl:/i libnftnl: libmnl # DDWRT_LIBNFTNL_DEPS' "$$nft"; \
-		fi; \
-		if [ -f "$$nft" ] && grep -Fq 'libnftnl-configure:' "$$nft" && \
-			grep -Fq 'LIBMNL_CPPFLAGS' "$$nft"; then \
-			sed -i -E '/^libnftnl-configure:/,/^libnftnl:/ { s|LIBMNL_CPPFLAGS="-I[$$][(]LINUXDIR[)]/include/uapi -I[$$][(]LINUXDIR[)]/include " CFLAGS="|LIBMNL_CFLAGS="|g; s|LIBMNL_CPPFLAGS=|LIBMNL_CFLAGS=|g; }' "$$nft"; \
-		fi
+		inject_make_copts_headers l2tpv3tun.mk l2tpv3tun-configure
 endef
 
 all:
