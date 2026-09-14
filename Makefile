@@ -37,7 +37,7 @@ else
   $(error "Unknown PROFILE=$(PROFILE)")
 endif
 
-MAKE_ROUTER := $(MAKE) -C $(BUILD_DIR) -f Makefile.mt7621 BOARD=$(BOARD) DTS=$(DTS) RPROFILE=$(PROFILE)
+MAKE_ROUTER := $(MAKE) -C $(BUILD_DIR) -f Makefile.mt7621 BOARD=$(BOARD) DTS=$(DTS) RPROFILE=$(PROFILE) KERNEL_HEADER_ARCH=mips
 PATH := $(TOOLCHAIN_DIR)/bin:$(TOP_DIR)/tools:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 KERNEL := universal/linux-4.14
 CRDA_URL := https://git.kernel.org/pub/scm/linux/kernel/git/sforshee/wireless-regdb.git
@@ -72,6 +72,21 @@ define VerifyUpnpNetconfLinkFix
 	@! grep -Fq -- '-lnetconf' "$(BUILD_DIR)/upnp/src/linux/Makefile" || { echo "UPnP still links the obsolete libnetconf dependency" >&2; exit 1; }
 endef
 
+define VerifyExportedKernelHeaders
+	@set -eu; \
+		kernel_release="$$(cat "$(LINUX_DIR)/include/config/kernel.release")"; \
+		headers="$(BUILD_DIR)/kernel_headers/$$kernel_release/include"; \
+		test -f "$$headers/linux/filter.h" || { echo "missing exported Linux filter header: $$headers/linux/filter.h" >&2; exit 1; }; \
+		! grep -Fq '<linux/linkage.h>' "$$headers/linux/filter.h" || { echo "kernel-internal filter header leaked into exported headers" >&2; exit 1; }
+endef
+
+define VerifyKernelHeaderInjection
+	@set -eu; \
+		rules="$(BUILD_DIR)/rules"; \
+		! grep -R -Fq -- '-I$$(LINUXDIR)/arch/mips/include/uapi -I$$(LINUXDIR)/include/uapi -I$$(LINUXDIR)/include' "$$rules" || { echo "raw kernel source headers remain in router rules" >&2; exit 1; }; \
+		grep -R -Fq -- '-I$$(TOP)/kernel_headers/$$(KERNELRELEASE)/include' "$$rules" || { echo "exported kernel headers were not injected into router rules" >&2; exit 1; }
+endef
+
 define VerifyClosedDriverNVRAMHeaders
 	@test -f "$(BUILD_DIR)/shared/ddnvram.h" || { echo "missing DD-WRT NVRAM API header: $(BUILD_DIR)/shared/ddnvram.h" >&2; exit 1; }
 	@for source in "$(BUILD_DIR)/services/sysinit/sysinit-rt2880.c" "$(BUILD_DIR)/services/networking/wifi/rt2880.c" "$(BUILD_DIR)/httpd/visuals/wireless_ralink.c"; do test -f "$$source" && grep -Fq '#include <ddnvram.h>' "$$source" || { echo "closed-driver source did not receive the ddnvram.h compatibility update: $$source" >&2; exit 1; }; done
@@ -95,6 +110,7 @@ endef
 define InjectCMakeDependencyPaths
 	@set -eu; \
 		rules="$(BUILD_DIR)/rules"; \
+		find "$$rules" -maxdepth 1 -type f -name '*.mk' -exec sed -i -e 's@-I$$(LINUXDIR)/arch/mips/include/uapi -I$$(LINUXDIR)/include/uapi -I$$(LINUXDIR)/include@-I$$(TOP)/kernel_headers/$$(KERNELRELEASE)/include@g' {} +; \
 		inject_cmake_paths() { \
 			rule="$$1"; target="$$2"; option_var="$$3"; path="$$rules/$$rule"; \
 			[ -f "$$path" ] || return 0; \
@@ -154,7 +170,7 @@ define InjectCMakeDependencyPaths
 		fi; \
 		comgt="$$rules/comgt.mk"; \
 		if [ -f "$$comgt" ] && grep -Fq '$$(MAKE) -C usb_modeswitch configure' "$$comgt" && ! grep -Fq 'DDWRT_COMGT_KERNEL_HEADERS' "$$comgt"; then \
-			sed -i -e '/^comgt-configure:/i comgt-configure comgt: export COPTS += -I$$(LINUXDIR)/arch/mips/include/uapi -I$$(LINUXDIR)/include/uapi -I$$(LINUXDIR)/include # DDWRT_COMGT_KERNEL_HEADERS' -- "$$comgt"; \
+			sed -i -e '/^comgt-configure:/i comgt-configure comgt: export COPTS += -I$$(TOP)/kernel_headers/$$(KERNELRELEASE)/include # DDWRT_COMGT_KERNEL_HEADERS' -- "$$comgt"; \
 			grep -Fq 'DDWRT_COMGT_KERNEL_HEADERS' "$$comgt" || { echo "comgt kernel UAPI header injection failed" >&2; exit 1; }; \
 		fi; \
 		inject_kernel_uapi_headers() { \
@@ -162,7 +178,7 @@ define InjectCMakeDependencyPaths
 			[ -f "$$path" ] || return 0; \
 			grep -Fq "$$target:" "$$path" || return 0; \
 			if grep -Fq "$$marker" "$$path"; then return 0; fi; \
-			sed -i -e "/^$$target:/i $$target: export CPPFLAGS += -I\$$(LINUXDIR)/arch/mips/include/uapi -I\$$(LINUXDIR)/include/uapi -I\$$(LINUXDIR)/include # $$marker" -- "$$path"; \
+			sed -i -e "/^$$target:/i $$target: export CPPFLAGS += -I\$$(TOP)/kernel_headers/\$$(KERNELRELEASE)/include # $$marker" -- "$$path"; \
 			grep -Fq "$$marker" "$$path" || { echo "kernel UAPI header injection failed: $$rule:$$target" >&2; exit 1; }; \
 		}; \
 		nft="$$rules/nftables.mk"; \
@@ -175,6 +191,7 @@ define InjectCMakeDependencyPaths
 		fi; \
 		inject_kernel_uapi_headers libmnl.mk libmnl-configure; \
 		inject_kernel_uapi_headers libnl.mk libnl-configure; \
+		inject_kernel_uapi_headers libnltiny.mk libnltiny; \
 		inject_kernel_uapi_headers libnfnetlink.mk libnfnetlink-configure; \
 		inject_kernel_uapi_headers libnetfilter_log.mk libnetfilter_log-configure; \
 		inject_kernel_uapi_headers libnetfilter_queue.mk libnetfilter_queue-configure; \
@@ -186,13 +203,17 @@ define InjectCMakeDependencyPaths
 		inject_kernel_uapi_headers quagga.mk quagga-configure; \
 		inject_kernel_uapi_headers frr.mk frr-configure; \
 		inject_kernel_uapi_headers strongswan.mk strongswan-configure; \
+		inject_kernel_uapi_headers openvpn.mk openvpn-configure; \
+		inject_kernel_uapi_headers pptpd.mk pptpd-configure; \
+		inject_kernel_uapi_headers radvd.mk radvd-configure; \
+		inject_kernel_uapi_headers wireguard.mk wireguard-configure; \
 		inject_make_copts_headers() { \
 			rule="$$1"; target="$$2"; path="$$rules/$$rule"; marker="DDWRT_KERNEL_UAPI_COPTS_$$target"; \
 			[ -f "$$path" ] || return 0; \
 			grep -Fq "$$target:" "$$path" || return 0; \
 			grep -Fq ' -C ' "$$path" || return 0; \
 			if grep -Fq "$$marker" "$$path"; then return 0; fi; \
-			sed -i -e "/^$$target:/i $$target: export COPTS += -I\$$(LINUXDIR)/arch/mips/include/uapi -I\$$(LINUXDIR)/include/uapi -I\$$(LINUXDIR)/include # $$marker" -- "$$path"; \
+			sed -i -e "/^$$target:/i $$target: export COPTS += -I\$$(TOP)/kernel_headers/\$$(KERNELRELEASE)/include # $$marker" -- "$$path"; \
 			grep -Fq "$$marker" "$$path" || { echo "kernel UAPI COPTS injection failed: $$rule:$$target" >&2; exit 1; }; \
 		}; \
 		inject_make_copts_headers iproute2.mk iproute2; \
@@ -202,6 +223,7 @@ define InjectCMakeDependencyPaths
 		inject_make_copts_headers xl2tpd.mk xl2tpd-configure; \
 		inject_make_copts_headers batman-adv.mk batman-adv; \
 		inject_make_copts_headers l2tpv3tun.mk l2tpv3tun-configure; \
+		inject_make_copts_headers pptp-client.mk pptp-client; \
 		minidlna_rule="$$rules/minidlna.mk"; \
 		if [ -f "$$minidlna_rule" ] && grep -Fq 'minidlna-configure:' "$$minidlna_rule"; then \
 			if ! grep -Fq 'DDWRT_MINIDLNA_OGG_CFLAGS' "$$minidlna_rule"; then \
@@ -311,7 +333,11 @@ endif
 	ln -sf ../../opt $(BUILD_DIR)/opt
 	cp $(LINUX_DIR)/drivers/net/wireless/Kconfig.dir882 $(LINUX_DIR)/drivers/net/wireless/Kconfig
 
+	$(MAKE) -C "$(LINUX_DIR)" ARCH=mips CROSS_COMPILE=mipsel-linux-uclibc- olddefconfig prepare
+	$(MAKE_ROUTER) install_headers
+	$(call VerifyExportedKernelHeaders)
 	$(call InjectCMakeDependencyPaths)
+	$(call VerifyKernelHeaderInjection)
 	python3 "$(TOP_DIR)/tools/fix-ar-flags.py" "$(BUILD_DIR)/rules" "$(BUILD_DIR)/Makefile.mt7621"
 	$(MAKE_ROUTER) gen_revision
 
