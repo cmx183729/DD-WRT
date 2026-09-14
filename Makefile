@@ -126,6 +126,13 @@ define InjectCMakeDependencyPaths
 		inject_libnltiny_dependency cfm.mk cfm-configure; \
 		inject_libnltiny_dependency cfm.mk cfm; \
 		inject_libnltiny_dependency batman-adv.mk batman-adv; \
+		services_rule="$$rules/services.mk"; \
+		if [ -f "$$services_rule" ] && grep -Eq '^services[[:space:]]*:' "$$services_rule"; then \
+			if ! grep -Fq 'DDWRT_SERVICES_BCMNVRAM_HEADERS' "$$services_rule"; then \
+				sed -i -e '/^services[[:space:]]*:/i services: export CFLAGS += -I$$(TOP)/shared -I$$(TOP)/nvram # DDWRT_SERVICES_BCMNVRAM_HEADERS' -- "$$services_rule"; \
+			fi; \
+			grep -Fq 'DDWRT_SERVICES_BCMNVRAM_HEADERS' "$$services_rule" || { echo "services bcmnvram header injection failed" >&2; exit 1; }; \
+		fi; \
 		htop="$$rules/htop.mk"; \
 		if [ -f "$$htop" ] && grep -Fq 'htop-configure:' "$$htop"; then \
 			if ! sed -n '/^[[:space:]]*CFLAGS="/p' "$$htop" | grep -Fq -- '-I$$(TOP)/libnl/include'; then \
