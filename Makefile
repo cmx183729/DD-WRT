@@ -68,6 +68,10 @@ define VerifyWolfsslArchiveFix
 	@grep -Fq 'AR="$$(WOLFSSL_AR)"' "$(BUILD_DIR)/rules/wolfssl.mk" || { echo "wolfSSL LTO-aware archiver patch was not applied" >&2; exit 1; }
 endef
 
+define VerifyUpnpNetconfLinkFix
+	@! grep -Fq -- '-lnetconf' "$(BUILD_DIR)/upnp/src/linux/Makefile" || { echo "UPnP still links the obsolete libnetconf dependency" >&2; exit 1; }
+endef
+
 define VerifyClosedDriverNVRAMHeaders
 	@test -f "$(BUILD_DIR)/shared/ddnvram.h" || { echo "missing DD-WRT NVRAM API header: $(BUILD_DIR)/shared/ddnvram.h" >&2; exit 1; }
 	@for source in "$(BUILD_DIR)/services/sysinit/sysinit-rt2880.c" "$(BUILD_DIR)/services/networking/wifi/rt2880.c" "$(BUILD_DIR)/httpd/visuals/wireless_ralink.c"; do test -f "$$source" && grep -Fq '#include <ddnvram.h>' "$$source" || { echo "closed-driver source did not receive the ddnvram.h compatibility update: $$source" >&2; exit 1; }; done
@@ -282,6 +286,7 @@ prepare: toolchain
 	$(call VerifyRebasedPatches)
 	$(call VerifyLibpcapFixes)
 	$(call VerifyWolfsslArchiveFix)
+	$(call VerifyUpnpNetconfLinkFix)
 	$(call PatchDir,$(TOP_DIR)/patches/$(BOARD))
 ifneq (,$(findstring mt76,$(PROFILE)))
 	$(call PatchDir,$(TOP_DIR)/patches/mt76)
