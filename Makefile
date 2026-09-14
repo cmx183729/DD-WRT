@@ -87,6 +87,14 @@ define VerifyKernelHeaderInjection
 		grep -R -Fq -- '-I$$(TOP)/kernel_headers/$$(KERNELRELEASE)/include' "$$rules" || { echo "exported kernel headers were not injected into router rules" >&2; exit 1; }
 endef
 
+define VerifyPppdStatsFix
+	@set -eu; \
+		source="$(BUILD_DIR)/pppd/pppd/sys-linux.c"; \
+		grep -Fq 'struct ifreq req;' "$$source" || { echo "pppd modern PPP statistics request fix was not applied" >&2; exit 1; }; \
+		grep -Fq 'struct ppp_stats data;' "$$source" || { echo "pppd statistics payload fix was not applied" >&2; exit 1; }; \
+		! grep -Fq 'struct ifpppstatsreq req;' "$$source" || { echo "pppd still depends on legacy ifpppstatsreq" >&2; exit 1; }
+endef
+
 define VerifyClosedDriverNVRAMHeaders
 	@test -f "$(BUILD_DIR)/shared/ddnvram.h" || { echo "missing DD-WRT NVRAM API header: $(BUILD_DIR)/shared/ddnvram.h" >&2; exit 1; }
 	@for source in "$(BUILD_DIR)/services/sysinit/sysinit-rt2880.c" "$(BUILD_DIR)/services/networking/wifi/rt2880.c" "$(BUILD_DIR)/httpd/visuals/wireless_ralink.c"; do test -f "$$source" && grep -Fq '#include <ddnvram.h>' "$$source" || { echo "closed-driver source did not receive the ddnvram.h compatibility update: $$source" >&2; exit 1; }; done
@@ -305,6 +313,7 @@ toolchain:
 
 prepare: toolchain
 	$(call PatchDir,$(TOP_DIR)/patches)
+	$(call VerifyPppdStatsFix)
 	$(call VerifyRebasedPatches)
 	$(call VerifyLibpcapFixes)
 	$(call VerifyWolfsslArchiveFix)
@@ -385,6 +394,7 @@ gen_patches:
 		svn diff src/router/mactelnet/Makefile > $(TOP_DIR)/patches/mactelnet.patch; \
 		svn diff src/router/ntfs3/Makefile > $(TOP_DIR)/patches/ntfs3.patch; \
 		svn diff src/router/olsrd/src/cfgparser/local.mk > $(TOP_DIR)/patches/olsrd.patch; \
+		svn diff src/router/pppd/pppd/sys-linux.c > $(TOP_DIR)/patches/pppd.patch; \
 		svn diff src/router/rules > $(TOP_DIR)/patches/rules.patch; \
 		svn diff src/router/shared > $(TOP_DIR)/patches/shared.patch; \
 		svn diff src/router/mac80211/drivers/net/wireless/Kconfig \
