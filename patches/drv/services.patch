@@ -2,12 +2,13 @@ Index: src/router/services/Makefile
 ===================================================================
 --- src/router/services/Makefile	(revision HEAD)
 +++ src/router/services/Makefile	(working copy)
-@@ -1641,6 +1641,9 @@ endif
+@@ -1641,6 +1641,10 @@ endif
  ifeq ($(CONFIG_DIR860),y)
  CFLAGS_EXTRA += -DHAVE_DIR860
  endif
 +ifeq ($(CONFIG_K2P),y)
 +CFLAGS_EXTRA += -DHAVE_K2P
++CFLAGS_EXTRA += -I$(TOP)/shared -I$(TOP)/nvram
 +endif
  ifeq ($(ARCHITECTURE),broadcom)
  CFLAGS_EXTRA += -DHAVE_BRCMROUTER

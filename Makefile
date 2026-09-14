@@ -126,17 +126,6 @@ define InjectCMakeDependencyPaths
 		inject_libnltiny_dependency cfm.mk cfm-configure; \
 		inject_libnltiny_dependency cfm.mk cfm; \
 		inject_libnltiny_dependency batman-adv.mk batman-adv; \
-		services_makefile="$(BUILD_DIR)/services/Makefile"; \
-		if [ -f "$$services_makefile" ]; then \
-			if ! grep -Fq 'CFLAGS += -I$$(TOP)/shared -I$$(TOP)/nvram # DDWRT_SERVICES_BCMNVRAM_CFLAGS' "$$services_makefile"; then \
-				echo 'CFLAGS += -I$$(TOP)/shared -I$$(TOP)/nvram # DDWRT_SERVICES_BCMNVRAM_CFLAGS' >> "$$services_makefile"; \
-			fi; \
-			if ! grep -Fq 'CPPFLAGS += -I$$(TOP)/shared -I$$(TOP)/nvram # DDWRT_SERVICES_BCMNVRAM_CPPFLAGS' "$$services_makefile"; then \
-				echo 'CPPFLAGS += -I$$(TOP)/shared -I$$(TOP)/nvram # DDWRT_SERVICES_BCMNVRAM_CPPFLAGS' >> "$$services_makefile"; \
-			fi; \
-			grep -Fq 'CFLAGS += -I$$(TOP)/shared -I$$(TOP)/nvram # DDWRT_SERVICES_BCMNVRAM_CFLAGS' "$$services_makefile" || { echo "services bcmnvram CFLAGS injection failed" >&2; exit 1; }; \
-			grep -Fq 'CPPFLAGS += -I$$(TOP)/shared -I$$(TOP)/nvram # DDWRT_SERVICES_BCMNVRAM_CPPFLAGS' "$$services_makefile" || { echo "services bcmnvram CPPFLAGS injection failed" >&2; exit 1; }; \
-		fi; \
 		htop="$$rules/htop.mk"; \
 		if [ -f "$$htop" ] && grep -Fq 'htop-configure:' "$$htop"; then \
 			if ! sed -n '/^[[:space:]]*CFLAGS="/p' "$$htop" | grep -Fq -- '-I$$(TOP)/libnl/include'; then \
