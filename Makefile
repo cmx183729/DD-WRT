@@ -87,12 +87,38 @@ define VerifyKernelHeaderInjection
 		grep -R -Fq -- '-I$$(TOP)/kernel_headers/$$(KERNELRELEASE)/include' "$$rules" || { echo "exported kernel headers were not injected into router rules" >&2; exit 1; }
 endef
 
+define InjectPppdStatsFix
+	@set -eu; \
+		source="$(BUILD_DIR)/pppd/pppd/sys-linux.c"; \
+		test -f "$$source" || { echo "missing pppd source: $$source" >&2; exit 1; }; \
+		sed -i \
+			-e 's@^[[:space:]]*#include[[:space:]]*<linux/ppp_defs[.]h>[[:space:]]*$$@#include <linux/ppp-ioctl.h>@' \
+			-e '/^[[:space:]]*#include[[:space:]]*<linux/if_ppp[.]h>[[:space:]]*$$/d' \
+			-e 's@^[[:space:]]*struct[[:space:]][[:space:]]*ifpppstatsreq[[:space:]][[:space:]]*req;[[:space:]]*$$@    struct ifreq req; struct ppp_stats data;@' \
+			-e 's@^[[:space:]]*req[.]stats_ptr[[:space:]]*=[[:space:]]*(caddr_t)[[:space:]]*&req[.]stats;[[:space:]]*$$@    req.ifr_data = (caddr_t) \&data;@' \
+			-e 's@^[[:space:]]*strlcpy(req[.]ifr__name,[[:space:]]*ifname,[[:space:]]*sizeof(req[.]ifr__name));[[:space:]]*$$@    strlcpy(req.ifr_name, ifname, sizeof(req.ifr_name));@' \
+			-e 's@req\.stats\.p\.ppp_ibytes@data.p.ppp_ibytes@g' \
+			-e 's@req\.stats\.p\.ppp_obytes@data.p.ppp_obytes@g' \
+			-e 's@req\.stats\.p\.ppp_ipackets@data.p.ppp_ipackets@g' \
+			-e 's@req\.stats\.p\.ppp_opackets@data.p.ppp_opackets@g' \
+			-- "$$source"; \
+		grep -Fq '#include <linux/ppp-ioctl.h>' "$$source" || { echo "pppd ioctl header injection failed" >&2; exit 1; }; \
+		! grep -Fq '#include <linux/if_ppp.h>' "$$source" || { echo "legacy pppd if_ppp header remains" >&2; exit 1; }
+endef
+
 define VerifyPppdStatsFix
 	@set -eu; \
 		source="$(BUILD_DIR)/pppd/pppd/sys-linux.c"; \
+		grep -Fq '#include <linux/ppp-ioctl.h>' "$$source" || { echo "pppd ioctl header was not selected" >&2; exit 1; }; \
 		grep -Fq 'struct ifreq req;' "$$source" || { echo "pppd modern PPP statistics request fix was not applied" >&2; exit 1; }; \
 		grep -Fq 'struct ppp_stats data;' "$$source" || { echo "pppd statistics payload fix was not applied" >&2; exit 1; }; \
-		! grep -Fq 'struct ifpppstatsreq req;' "$$source" || { echo "pppd still depends on legacy ifpppstatsreq" >&2; exit 1; }
+		grep -Fq 'req.ifr_data = (caddr_t) &data;' "$$source" || { echo "pppd statistics data pointer fix was not applied" >&2; exit 1; }; \
+		! grep -Fq '#include <linux/ppp_defs.h>' "$$source" || { echo "legacy pppd definitions header remains" >&2; exit 1; }; \
+		! grep -Fq '#include <linux/if_ppp.h>' "$$source" || { echo "legacy pppd ioctl header remains" >&2; exit 1; }; \
+		! grep -Fq 'struct ifpppstatsreq req;' "$$source" || { echo "pppd still depends on legacy ifpppstatsreq" >&2; exit 1; }; \
+		! grep -Fq 'req.stats_ptr' "$$source" || { echo "pppd still uses legacy statistics pointer" >&2; exit 1; }; \
+		! grep -Fq 'req.ifr__name' "$$source" || { echo "pppd still uses legacy interface-name field" >&2; exit 1; }; \
+		! grep -Fq 'req.stats.p.' "$$source" || { echo "pppd still reads legacy statistics payload" >&2; exit 1; }
 endef
 
 define VerifyClosedDriverNVRAMHeaders
@@ -313,6 +339,7 @@ toolchain:
 
 prepare: toolchain
 	$(call PatchDir,$(TOP_DIR)/patches)
+	$(call InjectPppdStatsFix)
 	$(call VerifyPppdStatsFix)
 	$(call VerifyRebasedPatches)
 	$(call VerifyLibpcapFixes)
@@ -394,7 +421,6 @@ gen_patches:
 		svn diff src/router/mactelnet/Makefile > $(TOP_DIR)/patches/mactelnet.patch; \
 		svn diff src/router/ntfs3/Makefile > $(TOP_DIR)/patches/ntfs3.patch; \
 		svn diff src/router/olsrd/src/cfgparser/local.mk > $(TOP_DIR)/patches/olsrd.patch; \
-		svn diff src/router/pppd/pppd/sys-linux.c > $(TOP_DIR)/patches/pppd.patch; \
 		svn diff src/router/rules > $(TOP_DIR)/patches/rules.patch; \
 		svn diff src/router/shared > $(TOP_DIR)/patches/shared.patch; \
 		svn diff src/router/mac80211/drivers/net/wireless/Kconfig \
