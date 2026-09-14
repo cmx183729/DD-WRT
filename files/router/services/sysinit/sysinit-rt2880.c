@@ -51,6 +51,7 @@
 #include <ddnvram.h>
 #include <shutils.h>
 #include <utils.h>
+#include <services.h>
 
 #define sys_reboot() eval("sync"); eval("/bin/umount","-a","-r"); eval("event","3","1","15")
 
@@ -118,6 +119,14 @@ int check_pmon_nv(void)
 	return 0;
 }
 
+/*
+ * Newer common services code calls this architecture hook unconditionally.
+ * Upstream's RT2880 implementation intentionally has no MT7621 action here.
+ */
+void sys_overclocking(void)
+{
+}
+
 void start_overclocking(void)
 {
 }
@@ -132,6 +141,50 @@ char *set_wan_state(int state)
 	return NULL;
 }
 
+/*
+ * network.c now configures br0 through this helper even when VLAN tagging is
+ * disabled.  Upstream provides it from vlantagging.c only with
+ * HAVE_VLANTAGGING; K2P deliberately disables that feature.  Keep the
+ * upstream STP/MSTP behavior available in the closed-driver configuration.
+ */
+#ifndef HAVE_VLANTAGGING
+void set_stp_state(char *bridge, char *stp)
+{
+	br_set_stp_state(bridge, strcmp(stp, "Off") ? 1 : 0);
+#ifdef HAVE_MSTP
+	if (!strcmp(stp, "MSTP") && nvram_nmatch("1", "%s_vlan", bridge))
+		eval("ip", "link", "set", "dev", bridge, "type", "bridge", "mst_enable", "1");
+	else
+		eval("ip", "link", "set", "dev", bridge, "type", "bridge", "mst_enable", "0");
+	if (strcmp(stp, "Off"))
+		eval("mstpctl", "addbridge", bridge);
+	else
+		eval("mstpctl", "delbridge", bridge);
+
+	if (!strcmp(stp, "STP"))
+		eval("mstpctl", "setforcevers", bridge, "stp");
+	if (!strcmp(stp, "MSTP"))
+		eval("mstpctl", "setforcevers", bridge, "mstp");
+	if (!strcmp(stp, "RSTP"))
+		eval("mstpctl", "setforcevers", bridge, "rstp");
+#endif
+}
+#endif
+
+/*
+ * The upstream RT2880 code only has post-network actions for unrelated
+ * boards.  K2P requires this no-op architecture hook to satisfy the current
+ * common services ABI without altering its Padavan driver startup path.
+ */
+void start_postnetwork(void)
+{
+}
+
 void start_devinit_arch(void)
+{
+}
+
+/* No RT2880/K2P-specific defaults are required by the common restore path. */
+void start_arch_defaults(void)
 {
 }

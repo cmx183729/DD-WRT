@@ -71,6 +71,11 @@ endef
 define VerifyClosedDriverNVRAMHeaders
 	@test -f "$(BUILD_DIR)/shared/ddnvram.h" || { echo "missing DD-WRT NVRAM API header: $(BUILD_DIR)/shared/ddnvram.h" >&2; exit 1; }
 	@for source in "$(BUILD_DIR)/services/sysinit/sysinit-rt2880.c" "$(BUILD_DIR)/services/networking/wifi/rt2880.c" "$(BUILD_DIR)/httpd/visuals/wireless_ralink.c"; do test -f "$$source" && grep -Fq '#include <ddnvram.h>' "$$source" || { echo "closed-driver source did not receive the ddnvram.h compatibility update: $$source" >&2; exit 1; }; done
+
+endef
+
+define VerifyClosedDriverServicesHooks
+	@for hook in 'void sys_overclocking(void)' 'void set_stp_state(char *bridge, char *stp)' 'void start_postnetwork(void)' 'void start_arch_defaults(void)'; do grep -Fq "$$hook" "$(BUILD_DIR)/services/sysinit/sysinit-rt2880.c" || { echo "closed-driver RT2880 services hook was not staged: $$hook" >&2; exit 1; }; done
 endef
 
 define VerifyRebasedPatches
@@ -293,6 +298,7 @@ else
 	cp -r $(TOP_DIR)/files/linux/net $(LINUX_DIR)/
 	cp -r $(TOP_DIR)/files/router/* $(BUILD_DIR)/
 	$(call VerifyClosedDriverNVRAMHeaders)
+	$(call VerifyClosedDriverServicesHooks)
 endif
 	cp $(TOP_DIR)/configs/$(BOARD)/dts/$(DTS).dts $(LINUX_DIR)/dts/$(DTS).dts
 	cp $(TOP_DIR)/configs/$(BOARD)/kernel/$(KCONFIG) $(LINUX_DIR)/.config
