@@ -70,9 +70,9 @@ void start_sysinit(void)
 	 * Setup console 
 	 */
 
-	cprintf("sysinit() klogctl\n");
+	printf("sysinit() klogctl\n");
 	klogctl(8, NULL, nvram_geti("console_loglevel"));
-	cprintf("sysinit() get router\n");
+	printf("sysinit() get router\n");
 
 	/*
 	 * Set a sane date 
@@ -124,10 +124,6 @@ int check_pmon_nv(void)
  * Upstream's RT2880 implementation intentionally has no MT7621 action here.
  */
 void sys_overclocking(void)
-{
-}
-
-void start_overclocking(void)
 {
 }
 
