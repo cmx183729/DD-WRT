@@ -175,7 +175,37 @@ define InjectCMakeDependencyPaths
 		inject_make_copts_headers pppd.mk pppd; \
 		inject_make_copts_headers xl2tpd.mk xl2tpd-configure; \
 		inject_make_copts_headers batman-adv.mk batman-adv; \
-		inject_make_copts_headers l2tpv3tun.mk l2tpv3tun-configure
+		inject_make_copts_headers l2tpv3tun.mk l2tpv3tun-configure; \
+		minidlna_rule="$$rules/minidlna.mk"; \
+		if [ -f "$$minidlna_rule" ] && grep -Fq 'minidlna-configure:' "$$minidlna_rule"; then \
+			if ! grep -Fq 'DDWRT_MINIDLNA_OGG_CFLAGS' "$$minidlna_rule"; then \
+				sed -i -e '/^minidlna-configure:/i minidlna-configure minidlna: export OGG_CFLAGS += -I$$(TOP)/minidlna/libogg-1.3.5/include # DDWRT_MINIDLNA_OGG_CFLAGS' -- "$$minidlna_rule"; \
+			fi; \
+			if ! grep -Fq 'DDWRT_MINIDLNA_OGG_LIBS' "$$minidlna_rule"; then \
+				sed -i -e '/^minidlna-configure:/i minidlna-configure minidlna: export OGG_LIBS += -L$$(TOP)/minidlna/libogg-1.3.5/src/.libs -logg # DDWRT_MINIDLNA_OGG_LIBS' -- "$$minidlna_rule"; \
+			fi; \
+			grep -Fq 'DDWRT_MINIDLNA_OGG_CFLAGS' "$$minidlna_rule" && grep -Fq 'DDWRT_MINIDLNA_OGG_LIBS' "$$minidlna_rule" || { echo "MiniDLNA Ogg flags injection failed" >&2; exit 1; }; \
+		fi; \
+		minidlna_makefile="$(BUILD_DIR)/minidlna/Makefile"; \
+		if [ -f "$$minidlna_makefile" ]; then \
+			if grep -Fq 'libvorbis:' "$$minidlna_makefile"; then \
+				if ! grep -Fq -- '--with-ogg-includes=' "$$minidlna_makefile" || ! grep -Fq -- '--with-ogg-libraries=' "$$minidlna_makefile"; then \
+					sed -i -e '/^[[:space:]]*cd libvorbis-1[.]3[.]7/ s@--disable-shared@--disable-shared --with-ogg-includes=$$(MINI_DLNA_PATH)/libogg-1.3.5/include --with-ogg-libraries=$$(MINI_DLNA_PATH)/libogg-1.3.5/src/.libs@' -e '/^libvorbis:/i # DDWRT_MINIDLNA_OGG_PATHS' -- "$$minidlna_makefile"; \
+				fi; \
+				grep -Fq -- '--with-ogg-includes=' "$$minidlna_makefile" && grep -Fq -- '--with-ogg-libraries=' "$$minidlna_makefile" || { echo "MiniDLNA libvorbis Ogg path injection failed" >&2; exit 1; }; \
+			fi; \
+			if grep -Fq 'LTOPLUGIN' "$$minidlna_makefile"; then \
+				sed -i -e 's@AR_FLAGS="\\\"cru \$$(LTOPLUGIN)\\\""@AR_FLAGS=cru@g' -e 's@RANLIB="\$$(ARCH)-linux-ranlib \$$(LTOPLUGIN)"@RANLIB="$$(CROSS_COMPILE)gcc-ranlib"@g' -- "$$minidlna_makefile"; \
+			fi; \
+			if ! grep -Fq 'DDWRT_MINIDLNA_AR_FLAGS' "$$minidlna_makefile"; then \
+				sed -i -e '/^libvorbis:/i # DDWRT_MINIDLNA_AR_FLAGS' -- "$$minidlna_makefile"; \
+			fi; \
+			if grep -E '(^|[[:space:]])(AR_FLAGS|RANLIB)=' "$$minidlna_makefile" | grep -Fq 'LTOPLUGIN'; then \
+				echo "MiniDLNA archiver still embeds LTO plugin in AR_FLAGS or RANLIB" >&2; exit 1; \
+			fi; \
+			grep -Fq 'AR_FLAGS=cru' "$$minidlna_makefile" || { echo "MiniDLNA archiver flags injection failed" >&2; exit 1; }; \
+			grep -Fq 'RANLIB="$$(CROSS_COMPILE)gcc-ranlib"' "$$minidlna_makefile" || { echo "MiniDLNA ranlib injection failed" >&2; exit 1; }; \
+		fi
 endef
 
 all:
