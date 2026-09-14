@@ -68,6 +68,11 @@ define VerifyWolfsslArchiveFix
 	@grep -Fq 'AR="$$(WOLFSSL_AR)"' "$(BUILD_DIR)/rules/wolfssl.mk" || { echo "wolfSSL LTO-aware archiver patch was not applied" >&2; exit 1; }
 endef
 
+define VerifyClosedDriverNVRAMHeaders
+	@test -f "$(BUILD_DIR)/shared/ddnvram.h" || { echo "missing DD-WRT NVRAM API header: $(BUILD_DIR)/shared/ddnvram.h" >&2; exit 1; }
+	@for source in "$(BUILD_DIR)/services/sysinit/sysinit-rt2880.c" "$(BUILD_DIR)/services/networking/wifi/rt2880.c" "$(BUILD_DIR)/httpd/visuals/wireless_ralink.c"; do test -f "$$source" && grep -Fq '#include <ddnvram.h>' "$$source" || { echo "closed-driver source did not receive the ddnvram.h compatibility update: $$source" >&2; exit 1; }; done
+endef
+
 define VerifyRebasedPatches
 	@grep -Fq '#if defined(HAVE_MICRO) || !defined(HAVE_PPTPD)' "$(BUILD_DIR)/httpd/visuals/menu.c" || { echo "httpd menu patch was not applied" >&2; exit 1; }
 	@grep -Fq '#if defined(HAVE_SANSFIL) || !defined(HAVE_HOTSPOT)' "$(BUILD_DIR)/httpd/visuals/menu.c" || { echo "httpd hotspot menu patch was not applied" >&2; exit 1; }
@@ -287,6 +292,7 @@ else
 	cp -r $(TOP_DIR)/files/linux/include $(LINUX_DIR)/
 	cp -r $(TOP_DIR)/files/linux/net $(LINUX_DIR)/
 	cp -r $(TOP_DIR)/files/router/* $(BUILD_DIR)/
+	$(call VerifyClosedDriverNVRAMHeaders)
 endif
 	cp $(TOP_DIR)/configs/$(BOARD)/dts/$(DTS).dts $(LINUX_DIR)/dts/$(DTS).dts
 	cp $(TOP_DIR)/configs/$(BOARD)/kernel/$(KCONFIG) $(LINUX_DIR)/.config

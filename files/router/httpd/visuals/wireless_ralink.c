@@ -36,7 +36,7 @@
 #include <wlutils.h>
 #include <utils.h>
 #include <bcmparams.h>
-#include <bcmnvram.h>
+#include <ddnvram.h>
 
 #include "wireless_generic.c"
 
