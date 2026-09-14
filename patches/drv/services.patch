@@ -2,7 +2,7 @@ Index: src/router/services/Makefile
 ===================================================================
 --- src/router/services/Makefile	(revision HEAD)
 +++ src/router/services/Makefile	(working copy)
-@@ -1641,6 +1641,10 @@ endif
+@@ -1600,6 +1600,10 @@ endif
  ifeq ($(CONFIG_DIR860),y)
  CFLAGS_EXTRA += -DHAVE_DIR860
  endif
@@ -13,7 +13,7 @@ Index: src/router/services/Makefile
  ifeq ($(ARCHITECTURE),broadcom)
  CFLAGS_EXTRA += -DHAVE_BRCMROUTER
  endif
-@@ -2182,14 +2185,14 @@ vpath %.c sysinit sysinit/switchlib sysinit/bench services tools networking netw
+@@ -2182,14 +2186,14 @@ all: services_main
  all: services_main
  ifeq ($(CONFIG_RT2880),y)
  ifeq ($(CONFIG_MT7620),y)
