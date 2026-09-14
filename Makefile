@@ -126,6 +126,18 @@ define InjectCMakeDependencyPaths
 		inject_libnltiny_dependency cfm.mk cfm-configure; \
 		inject_libnltiny_dependency cfm.mk cfm; \
 		inject_libnltiny_dependency batman-adv.mk batman-adv; \
+		htop="$$rules/htop.mk"; \
+		if [ -f "$$htop" ] && grep -Fq 'htop-configure:' "$$htop"; then \
+			if ! sed -n '/^[[:space:]]*CFLAGS="/p' "$$htop" | grep -Fq -- '-I$$(TOP)/libnl/include'; then \
+				sed -i -e '/^[[:space:]]*CFLAGS="/ s@CFLAGS="@CFLAGS="-I$$(TOP)/libnl/include @' -- "$$htop"; \
+			fi; \
+			if ! grep -Fq 'DDWRT_HTOP_LIBNL_HEADERS' "$$htop"; then \
+				sed -i -e '/^htop-configure:/i # DDWRT_HTOP_LIBNL_HEADERS' -- "$$htop"; \
+			fi; \
+			if ! sed -n '/^[[:space:]]*CFLAGS="/p' "$$htop" | grep -Fq -- '-I$$(TOP)/libnl/include'; then \
+				echo "htop libnl header injection failed" >&2; exit 1; \
+			fi; \
+		fi; \
 		comgt="$$rules/comgt.mk"; \
 		if [ -f "$$comgt" ] && grep -Fq '$$(MAKE) -C usb_modeswitch configure' "$$comgt" && ! grep -Fq 'DDWRT_COMGT_KERNEL_HEADERS' "$$comgt"; then \
 			sed -i -e '/^comgt-configure:/i comgt-configure comgt: export COPTS += -I$$(LINUXDIR)/arch/mips/include/uapi -I$$(LINUXDIR)/include/uapi -I$$(LINUXDIR)/include # DDWRT_COMGT_KERNEL_HEADERS' -- "$$comgt"; \
