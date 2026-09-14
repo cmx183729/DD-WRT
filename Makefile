@@ -129,12 +129,9 @@ define InjectCMakeDependencyPaths
 		services_makefile="$(BUILD_DIR)/services/Makefile"; \
 		if [ -f "$$services_makefile" ]; then \
 			if ! grep -Fq 'DDWRT_SERVICES_BCMNVRAM_CFLAGS' "$$services_makefile"; then \
-				sed -i -e '$a CFLAGS += -I$$(TOP)/shared -I$$(TOP)/nvram # DDWRT_SERVICES_BCMNVRAM_CFLAGS' -- "$$services_makefile"; \
+				sed -i -e 's@^CFLAGS.*=.*@& -I$$(TOP)/shared -I$$(TOP)/nvram # DDWRT_SERVICES_BCMNVRAM_CFLAGS@' -- "$$services_makefile"; \
 			fi; \
-			if ! grep -Fq 'DDWRT_SERVICES_BCMNVRAM_CPPFLAGS' "$$services_makefile"; then \
-				sed -i -e '$a CPPFLAGS += -I$$(TOP)/shared -I$$(TOP)/nvram # DDWRT_SERVICES_BCMNVRAM_CPPFLAGS' -- "$$services_makefile"; \
-			fi; \
-			grep -Fq 'DDWRT_SERVICES_BCMNVRAM_CFLAGS' "$$services_makefile" && grep -Fq 'DDWRT_SERVICES_BCMNVRAM_CPPFLAGS' "$$services_makefile" || { echo "services bcmnvram header injection failed" >&2; exit 1; }; \
+			grep -Eq '^CFLAGS.*DDWRT_SERVICES_BCMNVRAM_CFLAGS' "$$services_makefile" || { echo "services bcmnvram CFLAGS injection failed" >&2; exit 1; }; \
 		fi; \
 		htop="$$rules/htop.mk"; \
 		if [ -f "$$htop" ] && grep -Fq 'htop-configure:' "$$htop"; then \
