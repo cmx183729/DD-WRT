@@ -510,7 +510,7 @@ int active_wireless_if(webs_t wp, int argc, char_t ** argv, char *ifname, int *c
 
 	}
 
-	closesocket();
+	dd_closesocket();
 	return globalcnt;
 }
 
