@@ -142,6 +142,70 @@ define VerifyClosedDriverServicesHooks
 	@for hook in 'void sys_overclocking(void)' 'void set_stp_state(char *bridge, char *stp)' 'void start_postnetwork(void)' 'void start_arch_defaults(void)'; do grep -Fq "$$hook" "$(BUILD_DIR)/services/sysinit/sysinit-rt2880.c" || { echo "closed-driver RT2880 services hook was not staged: $$hook" >&2; exit 1; }; done
 endef
 
+# Verify the two driver families remain separate after the dynamic source is
+# staged.  This is intentionally read-only: do not rewrite driver/blob code.
+define VerifyK2PDriverBoundary
+	@set -eu; \
+		case "$(PROFILE)" in \
+			k2p|k2p-mini) \
+				for setting in 'CONFIG_HW_NAT=y' 'CONFIG_RA_NAT_HW=y' 'CONFIG_RA_HW_NAT=m' 'CONFIG_RAETH=y' 'CONFIG_MT7615_AP=m'; do \
+					grep -Fxq "$$setting" "$(LINUX_DIR)/.config" || { echo "closed K2P config missing: $$setting" >&2; exit 1; }; \
+				done; \
+				for source in "$(LINUX_DIR)/net/nat/hw_nat/ra_nat.c" "$(LINUX_DIR)/drivers/net/ethernet/raeth/raether.c" "$(LINUX_DIR)/drivers/net/wireless/mt7615/mt_wifi_ap/Makefile"; do \
+					test -f "$$source" || { echo "closed K2P overlay missing: $$source" >&2; exit 1; }; \
+				done; \
+				grep -Eq '^obj-\$$(CONFIG_RA_HW_NAT)[[:space:]]+\+=[[:space:]]+nat/hw_nat/$$' "$(LINUX_DIR)/net/Makefile" || { echo "hw_nat Kbuild hook missing" >&2; exit 1; }; \
+				grep -Eq '^obj-\$$(CONFIG_MT_AP_SUPPORT)[[:space:]]+\+=[[:space:]]+mt7615/mt_wifi_ap/$$' "$(LINUX_DIR)/drivers/net/wireless/Makefile" || { echo "MT7615 Kbuild hook missing" >&2; exit 1; }; \
+				;; \
+			k2p-mt76) \
+				grep -Fxq 'CONFIG_MT76=y' "$(BUILD_DIR)/.config" || { echo "MT76 router config missing" >&2; exit 1; }; \
+				! grep -Eq '^CONFIG_(HW_NAT|RA_NAT_HW|RA_HW_NAT|RAETH|MT7615_AP)=' "$(LINUX_DIR)/.config" || { echo "closed-driver/HW-NAT kernel config leaked into MT76" >&2; exit 1; }; \
+				;; \
+		esac
+endef
+
+# DD-WRT stages Qualcomm NSS ath11k sources unconditionally in the ath9k
+# rule.  K2P's MT76 tree has neither the NSS tree nor ath11k, so suppress only
+# those four irrelevant staging commands after the source checkout.
+define DisableK2pMt76Ath11kNssCopies
+	@set -eu; \
+		rule="$(BUILD_DIR)/mac80211-rules/ath9k-kconfig.mk"; \
+		test -f "$$rule" || { echo "missing mac80211 rule: $$rule" >&2; exit 1; }; \
+		sed -i \
+			-e '/^[[:space:]]*cp[[:space:]].*compat-wireless-nss.*ath11k.*[*][.]c/d' \
+			-e '/^[[:space:]]*cp[[:space:]].*compat-wireless-nss.*ath11k.*[*][.]h/d' \
+			-e '/^[[:space:]]*touch[[:space:]].*compat-wireless-nss.*ath11k_512.*[*][.]c/d' \
+			-e '/^[[:space:]]*touch[[:space:]].*compat-wireless-nss.*ath11k_512.*[*][.]h/d' \
+			-- "$$rule"; \
+		! grep -Eq '^[[:space:]]*(cp|touch)[[:space:]].*compat-wireless-nss.*ath11k' "$$rule" || { echo "unwanted ath11k NSS staging remains for k2p-mt76" >&2; exit 1; }
+endef
+
+# Backport only the MT7615 TX wcid guard from OpenWrt mt76 bd41e0f.  The
+# surrounding legacy backports tree stays intact, avoiding a 4.14-wide update.
+define InjectMt7615TxWcidGuard
+	@set -eu; \
+		for source in "$(BUILD_DIR)/mac80211/drivers/net/wireless/mediatek/mt76/mt7615/pci_mac.c" "$(BUILD_DIR)/mac80211/drivers/net/wireless/mediatek/mt76/mt7615/usb_sdio.c"; do \
+			test -f "$$source" || { echo "missing MT7615 TX source: $$source" >&2; exit 1; }; \
+			old_decl=$$(grep -Fc 'struct mt7615_sta *msta;' "$$source" || true); \
+			new_decl=$$(grep -Fc 'struct mt7615_sta *msta = NULL;' "$$source" || true); \
+			old_assign=$$(grep -Fc 'msta = wcid ? container_of(wcid, struct mt7615_sta, wcid) : NULL;' "$$source" || true); \
+			new_guard=$$(grep -Fc 'if (wcid && wcid->sta)' "$$source" || true); \
+			case "$$old_decl:$$new_decl:$$old_assign:$$new_guard" in \
+				1:0:1:0) \
+					sed -i \
+						-e 's@^[[:space:]]*struct mt7615_sta \*msta;[[:space:]]*$$@        struct mt7615_sta *msta = NULL;@' \
+						-e 's@^[[:space:]]*msta = wcid ? container_of(wcid, struct mt7615_sta, wcid) : NULL;[[:space:]]*$$@        if (wcid \&\& wcid->sta)\n                msta = container_of(wcid, struct mt7615_sta, wcid);@' \
+						-- "$$source"; \
+					;; \
+				0:1:0:1) ;; \
+				*) echo "unexpected MT7615 TX wcid context: $$source ($$old_decl:$$new_decl:$$old_assign:$$new_guard)" >&2; exit 1;; \
+			esac; \
+			test "$$(grep -Fc 'struct mt7615_sta *msta = NULL;' "$$source" || true)" -eq 1; \
+			test "$$(grep -Fc 'if (wcid && wcid->sta)' "$$source" || true)" -eq 1; \
+			test "$$(grep -Fc 'msta = wcid ? container_of(wcid, struct mt7615_sta, wcid) : NULL;' "$$source" || true)" -eq 0; \
+		done
+endef
+
 define VerifyRebasedPatches
 	@grep -Fq '#if defined(HAVE_MICRO) || !defined(HAVE_PPTPD)' "$(BUILD_DIR)/httpd/visuals/menu.c" || { echo "httpd menu patch was not applied" >&2; exit 1; }
 	@grep -Fq '#if defined(HAVE_SANSFIL) || !defined(HAVE_HOTSPOT)' "$(BUILD_DIR)/httpd/visuals/menu.c" || { echo "httpd hotspot menu patch was not applied" >&2; exit 1; }
@@ -357,8 +421,11 @@ prepare: toolchain
 	$(call VerifyWolfsslArchiveFix)
 	$(call VerifyUpnpNetconfLinkFix)
 	$(call PatchDir,$(TOP_DIR)/patches/$(BOARD))
-ifneq (,$(findstring mt76,$(PROFILE)))
+
+ifeq ($(PROFILE),k2p-mt76)
 	$(call PatchDir,$(TOP_DIR)/patches/mt76)
+	$(call DisableK2pMt76Ath11kNssCopies)
+	$(call InjectMt7615TxWcidGuard)
 	[ -d $(BUILD_DIR)/crda ] || git clone $(CRDA_URL) $(BUILD_DIR)/crda
 	echo "#!/bin/sh\n\necho crda called" > $(BUILD_DIR)/crda/crda.sh
 	chmod +x $(BUILD_DIR)/crda/crda.sh
@@ -379,6 +446,7 @@ endif
 	cp $(TOP_DIR)/configs/$(BOARD)/$(CONFIG) $(BUILD_DIR)/.config
 	ln -sf ../../opt $(BUILD_DIR)/opt
 	cp $(LINUX_DIR)/drivers/net/wireless/Kconfig.dir882 $(LINUX_DIR)/drivers/net/wireless/Kconfig
+	$(call VerifyK2PDriverBoundary)
 
 	$(MAKE) -C "$(LINUX_DIR)" ARCH=mips CROSS_COMPILE=mipsel-linux-uclibc- olddefconfig prepare
 	$(MAKE_ROUTER) install_headers

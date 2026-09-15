@@ -15,13 +15,14 @@ on:
         type: boolean
 
 jobs:
-  build:
+  build-closed:
     runs-on: ubuntu-22.04
     permissions:
       contents: read
     strategy:
+      fail-fast: false
       matrix:
-        profile: [k2p-mt76, k2p-mini, k2p]
+        profile: [k2p-mini, k2p]
     steps:
       - uses: actions/checkout@v7
       - name: Install packages
@@ -82,8 +83,72 @@ jobs:
           name: images-${{ matrix.profile }}
           path: images/*.bin
           if-no-files-found: error
+  build-mt76:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            autoconf-archive automake autopoint bc bison build-essential bzip2 ca-certificates \
+            ccache cmake cpio curl fakeroot file flex gawk gengetopt gettext git gperf gzip \
+            gtk-doc-tools help2man kmod libc-dev-bin libgmp-dev libltdl-dev libmpc-dev \
+            libmpfr-dev libncurses-dev libtool-bin meson nano ninja-build patch perl pkg-config \
+            python-is-python3 python3 python3-docutils python3-pip rsync subversion tar texinfo unzip wget xxd \
+            xz-utils zip zlib1g-dev
+          # Ubuntu 22.04 ships Meson 0.61, while current GLib needs Meson >= 1.4.
+          # Install modern user-local build tools and expose them to all later steps.
+          python3 -m pip install --user --upgrade "meson>=1.4.0" ninja cmake
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/meson" --version
+          "$HOME/.local/bin/ninja" --version
+          "$HOME/.local/bin/cmake" --version
+      - uses: hendrikmuhs/ccache-action@v1.2.24
+        with:
+          key: k2p-mt76
+          install: no
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          check-latest: false
+          package-manager-cache: false
+      - name: Install frontend minifiers
+        shell: bash
+        run: |
+          set -euo pipefail
+          tool_prefix="$RUNNER_TEMP/ddwrt-npm-tools"
+          npm install --prefix "$tool_prefix" --no-save --package-lock=false --no-audit --no-fund \
+            --ignore-scripts uglify-js@3.19.3 uglifycss@0.0.29
+          ln -sf "$tool_prefix/node_modules/.bin/uglifyjs" "$GITHUB_WORKSPACE/tools/uglifyjs"
+          ln -sf "$tool_prefix/node_modules/.bin/uglifycss" "$GITHUB_WORKSPACE/tools/uglifycss"
+          ln -sf "$(command -v node)" "$GITHUB_WORKSPACE/tools/node"
+          test -x "$GITHUB_WORKSPACE/tools/uglifyjs"
+          test -x "$GITHUB_WORKSPACE/tools/uglifycss"
+          test -x "$GITHUB_WORKSPACE/tools/node"
+          PATH="$GITHUB_WORKSPACE/tools:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+          export PATH
+          printf 'var x = 1;\n' | uglifyjs > /dev/null
+          printf 'a { color: red; }\n' | uglifycss > /dev/null
+      - name: Prepare
+        run: |
+          echo PROFILE=k2p-mt76 > .config
+          echo REVISION=${{ inputs.revision || 'HEAD' }} >> .config
+          make checkout
+          make prepare
+      - name: Configure
+        run: make configure
+      - name: Build
+        run: make all
+      - uses: actions/upload-artifact@v7
+        with:
+          name: images-k2p-mt76
+          path: images/*.bin
+          if-no-files-found: error
   publish:
-    needs: [build]
+    needs: [build-closed, build-mt76]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
