@@ -142,6 +142,23 @@ define VerifyClosedDriverServicesHooks
 	@for hook in 'void sys_overclocking(void)' 'void set_stp_state(char *bridge, char *stp)' 'void start_postnetwork(void)' 'void start_arch_defaults(void)'; do grep -Fq "$$hook" "$(BUILD_DIR)/services/sysinit/sysinit-rt2880.c" || { echo "closed-driver RT2880 services hook was not staged: $$hook" >&2; exit 1; }; done
 endef
 
+# The closed K2P tree carries hw_nat as a Kbuild module.  The normal source
+# patch installs this line; retain an idempotent, closed-profile-only fallback
+# so a changed upstream net/Makefile cannot silently drop the module.
+define EnsureClosedK2PHwNatKbuildHook
+	@set -eu; \
+		case "$(PROFILE)" in \
+			k2p|k2p-mini) ;; \
+			*) exit 0 ;; \
+		esac; \
+		net_make="$(LINUX_DIR)/net/Makefile"; \
+		test -f "$$net_make" || { echo "missing kernel net Makefile: $$net_make" >&2; exit 1; }; \
+		if ! grep -Eq '^obj-\$$\(CONFIG_RA_HW_NAT\)[[:space:]]+\+=[[:space:]]+nat/hw_nat/[[:space:]]*$$' "$$net_make"; then \
+			printf '%s\n' 'obj-$$(CONFIG_RA_HW_NAT) += nat/hw_nat/' >> "$$net_make"; \
+		fi; \
+		grep -Eq '^obj-\$$\(CONFIG_RA_HW_NAT\)[[:space:]]+\+=[[:space:]]+nat/hw_nat/[[:space:]]*$$' "$$net_make" || { echo "unable to install hw_nat Kbuild hook" >&2; exit 1; }
+endef
+
 # Verify the two driver families remain separate after the dynamic source is
 # staged.  This is intentionally read-only: do not rewrite driver/blob code.
 define VerifyK2PDriverBoundary
@@ -154,8 +171,11 @@ define VerifyK2PDriverBoundary
 				for source in "$(LINUX_DIR)/net/nat/hw_nat/ra_nat.c" "$(LINUX_DIR)/drivers/net/ethernet/raeth/raether.c" "$(LINUX_DIR)/drivers/net/wireless/mt7615/mt_wifi_ap/Makefile"; do \
 					test -f "$$source" || { echo "closed K2P overlay missing: $$source" >&2; exit 1; }; \
 				done; \
-				grep -Eq '^obj-\$$(CONFIG_RA_HW_NAT)[[:space:]]+\+=[[:space:]]+nat/hw_nat/$$' "$(LINUX_DIR)/net/Makefile" || { echo "hw_nat Kbuild hook missing" >&2; exit 1; }; \
-				grep -Eq '^obj-\$$(CONFIG_MT_AP_SUPPORT)[[:space:]]+\+=[[:space:]]+mt7615/mt_wifi_ap/$$' "$(LINUX_DIR)/drivers/net/wireless/Makefile" || { echo "MT7615 Kbuild hook missing" >&2; exit 1; }; \
+				grep -Fq 'source "net/nat/hw_nat/Kconfig"' "$(LINUX_DIR)/net/Kconfig" || { echo "hw_nat Kconfig hook missing" >&2; exit 1; }; \
+				grep -Fq 'menuconfig WIFI_DRIVER' "$(LINUX_DIR)/drivers/net/wireless/Kconfig" || { echo "closed MT7615 Kconfig menu missing" >&2; exit 1; }; \
+				grep -Fq 'source "drivers/net/wireless/mt7615/mt_wifi/embedded/Kconfig"' "$(LINUX_DIR)/drivers/net/wireless/Kconfig" || { echo "closed MT7615 Kconfig source missing" >&2; exit 1; }; \
+				grep -Eq '^obj-\$$\(CONFIG_RA_HW_NAT\)[[:space:]]+\+=[[:space:]]+nat/hw_nat/[[:space:]]*$$' "$(LINUX_DIR)/net/Makefile" || { echo "hw_nat Kbuild hook missing" >&2; exit 1; }; \
+				grep -Eq '^obj-\$$\(CONFIG_MT_AP_SUPPORT\)[[:space:]]+\+=[[:space:]]+mt7615/mt_wifi_ap/[[:space:]]*$$' "$(LINUX_DIR)/drivers/net/wireless/Makefile" || { echo "MT7615 Kbuild hook missing" >&2; exit 1; }; \
 				;; \
 			k2p-mt76) \
 				grep -Fxq 'CONFIG_MT76=y' "$(BUILD_DIR)/.config" || { echo "MT76 router config missing" >&2; exit 1; }; \
@@ -440,12 +460,12 @@ else
 	cp -r $(TOP_DIR)/files/router/* $(BUILD_DIR)/
 	$(call VerifyClosedDriverNVRAMHeaders)
 	$(call VerifyClosedDriverServicesHooks)
+	$(call EnsureClosedK2PHwNatKbuildHook)
 endif
 	cp $(TOP_DIR)/configs/$(BOARD)/dts/$(DTS).dts $(LINUX_DIR)/dts/$(DTS).dts
 	cp $(TOP_DIR)/configs/$(BOARD)/kernel/$(KCONFIG) $(LINUX_DIR)/.config
 	cp $(TOP_DIR)/configs/$(BOARD)/$(CONFIG) $(BUILD_DIR)/.config
 	ln -sf ../../opt $(BUILD_DIR)/opt
-	cp $(LINUX_DIR)/drivers/net/wireless/Kconfig.dir882 $(LINUX_DIR)/drivers/net/wireless/Kconfig
 	$(call VerifyK2PDriverBoundary)
 
 	$(MAKE) -C "$(LINUX_DIR)" ARCH=mips CROSS_COMPILE=mipsel-linux-uclibc- olddefconfig prepare
@@ -506,7 +526,7 @@ gen_patches:
 		svn diff src/router/mac80211/drivers/net/wireless/Kconfig \
 				src/router/mac80211/drivers/net/wireless/mediatek/mt76/Kconfig > $(TOP_DIR)/patches/mt76/mac80211.patch; \
 		svn diff src/router/mac80211/drivers/net/wireless/mediatek/mt76 > $(TOP_DIR)/patches/mt76/mt76.patch; \
-		svn diff src/linux/universal/linux-4.14/drivers/net/wireless/Kconfig.dir882 \
+		svn diff src/linux/universal/linux-4.14/drivers/net/wireless/Kconfig \
 				src/linux/universal/linux-4.14/drivers/net/wireless/Makefile > $(TOP_DIR)/patches/drv/mt7615.patch; \
 		svn diff src/router/others/Makefile > $(TOP_DIR)/patches/drv/others.patch; \
 		svn diff src/router/rc/rc.c src/router/rc/Makefile > $(TOP_DIR)/patches/drv/mtk_esw.patch; \

@@ -1,7 +1,7 @@
-Index: src/linux/universal/linux-4.14/drivers/net/wireless/Kconfig.dir882
+Index: src/linux/universal/linux-4.14/drivers/net/wireless/Kconfig
 ===================================================================
---- src/linux/universal/linux-4.14/drivers/net/wireless/Kconfig.dir882	(revision 53494)
-+++ src/linux/universal/linux-4.14/drivers/net/wireless/Kconfig.dir882	(working copy)
+--- src/linux/universal/linux-4.14/drivers/net/wireless/Kconfig	(revision 53494)
++++ src/linux/universal/linux-4.14/drivers/net/wireless/Kconfig	(working copy)
 @@ -33,6 +33,146 @@
  source "drivers/net/wireless/ti/Kconfig"
  source "drivers/net/wireless/zydas/Kconfig"
