@@ -385,6 +385,29 @@ define InjectCMakeDependencyPaths
 		fi
 endef
 
+# tcpdump invokes $(AR) directly for libnetdissect.a, rather than using an
+# ARFLAGS variable.  The global LTO normalizer must therefore retain tcpdump's
+# one archive operation in AR while leaving plugin selection to gcc-ar.
+define InjectTcpdumpArchiveFix
+	@set -eu; \
+		rule="$(BUILD_DIR)/rules/tcpdump.mk"; \
+		test -f "$$rule" || { echo "missing tcpdump build rule: $$rule" >&2; exit 1; }; \
+		grep -Fq 'tcpdump-configure:' "$$rule" || { echo "tcpdump configure target missing: $$rule" >&2; exit 1; }; \
+		sed -i \
+			-e 's@AR="$$(ARCH)-linux-ar cru $$(LTOPLUGIN)"@AR="$$(CROSS_COMPILE)gcc-ar cru"@g' \
+			-e 's@AR="$$(CROSS_COMPILE)gcc-ar"@AR="$$(CROSS_COMPILE)gcc-ar cru"@g' \
+			-e 's@RANLIB="$$(ARCH)-linux-ranlib $$(LTOPLUGIN)"@RANLIB="$$(CROSS_COMPILE)gcc-ranlib"@g' \
+			-- "$$rule"; \
+		if ! grep -Fq 'DDWRT_TCPDUMP_ARCHIVER' "$$rule"; then \
+			sed -i -e '/^tcpdump-configure:/i # DDWRT_TCPDUMP_ARCHIVER' -- "$$rule"; \
+		fi; \
+		grep -Fq 'AR="$$(CROSS_COMPILE)gcc-ar cru"' "$$rule" || { echo "tcpdump archiver injection failed" >&2; exit 1; }; \
+		grep -Fq 'RANLIB="$$(CROSS_COMPILE)gcc-ranlib"' "$$rule" || { echo "tcpdump ranlib injection failed" >&2; exit 1; }; \
+		if grep -E '^[[:space:]]*(AR|RANLIB)=' "$$rule" | grep -Fq 'LTOPLUGIN'; then \
+			echo "tcpdump archiver still embeds the LTO plugin" >&2; exit 1; \
+		fi
+endef
+
 all:
 	$(MAKE_ROUTER) kernel
 	$(MAKE_ROUTER) all
@@ -474,6 +497,7 @@ endif
 	$(call InjectCMakeDependencyPaths)
 	$(call VerifyKernelHeaderInjection)
 	python3 "$(TOP_DIR)/tools/fix-ar-flags.py" "$(BUILD_DIR)/rules" "$(BUILD_DIR)/Makefile.mt7621"
+	$(call InjectTcpdumpArchiveFix)
 	$(call InjectDnscryptPluginFix)
 	$(MAKE_ROUTER) gen_revision
 
