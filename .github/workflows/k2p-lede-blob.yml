@@ -1,0 +1,159 @@
+name: k2p-lede-blob (isolated source preflight)
+
+# This workflow is intentionally manual and does not participate in build.yml,
+# its artifacts, or its release job. It never checks out this DD-WRT tree.
+on:
+  workflow_dispatch:
+    inputs:
+      lede_ref:
+        description: 'Full 40-character coolsnowwolf/lede commit SHA'
+        required: true
+        type: string
+      device_config_url:
+        description: 'HTTPS URL to the immutable K2P LEDE .config'
+        required: true
+        type: string
+      device_config_sha256:
+        description: 'Lowercase SHA-256 for that .config'
+        required: true
+        type: string
+      build_image:
+        description: 'Run the separate LEDE image build after preflight'
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: k2p-lede-blob-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  source-contract:
+    name: k2p-lede-blob source contract
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Fetch and verify only the isolated LEDE source
+        env:
+          LEDE_REF: ${{ inputs.lede_ref }}
+          DEVICE_CONFIG_URL: ${{ inputs.device_config_url }}
+          DEVICE_CONFIG_SHA256: ${{ inputs.device_config_sha256 }}
+        run: |
+          set -euo pipefail
+
+          if ! [[ "$LEDE_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'lede_ref must be a full lowercase 40-character commit SHA' >&2
+            exit 2
+          fi
+          if ! [[ "$DEVICE_CONFIG_URL" == https://* ]]; then
+            echo 'device_config_url must use HTTPS' >&2
+            exit 2
+          fi
+          if ! [[ "$DEVICE_CONFIG_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+            echo 'device_config_sha256 must be a lowercase SHA-256 digest' >&2
+            exit 2
+          fi
+
+          workdir="$RUNNER_TEMP/k2p-lede-blob"
+          source_dir="$workdir/source"
+          config_file="$workdir/k2p-lede.config"
+          mkdir -p "$workdir"
+
+          git init --quiet "$source_dir"
+          git -C "$source_dir" remote add origin https://github.com/coolsnowwolf/lede.git
+          git -C "$source_dir" fetch --depth=1 origin "$LEDE_REF"
+          git -C "$source_dir" checkout --detach --quiet FETCH_HEAD
+          actual_ref="$(git -C "$source_dir" rev-parse HEAD)"
+          test "$actual_ref" = "$LEDE_REF" || {
+            echo "resolved LEDE ref $actual_ref does not match requested $LEDE_REF" >&2
+            exit 1
+          }
+
+          curl --fail --location --proto '=https' --retry 3 \
+            --output "$config_file" "$DEVICE_CONFIG_URL"
+          printf '%s  %s\n' "$DEVICE_CONFIG_SHA256" "$config_file" | sha256sum --check --status
+
+          grep -Fxq 'CONFIG_TARGET_ramips_mt7621_DEVICE_phicomm_k2p=y' "$config_file" || {
+            echo 'K2P MT7621 target is not selected by the supplied LEDE config' >&2
+            exit 1
+          }
+          for setting in \
+            'CONFIG_PACKAGE_kmod-mt7615d=y' \
+            'CONFIG_MTK_APCLI_SUPPORT=y' \
+            'CONFIG_MTK_MAC_REPEATER_SUPPORT=y' \
+            'CONFIG_MTK_DOT11R_FT_SUPPORT=y' \
+            'CONFIG_MTK_DOT11K_RRM_SUPPORT=y'; do
+            grep -Fxq "$setting" "$config_file" || {
+              echo "required LEDE wireless setting is missing: $setting" >&2
+              exit 1
+            }
+          done
+
+          mt7615_make="$source_dir/package/lean/mt/drivers/mt7615d/Makefile"
+          test -f "$mt7615_make" || {
+            echo "expected LEDE MT7615 package is missing: $mt7615_make" >&2
+            exit 1
+          }
+          for feature in APCLI_SUPPORT MAC_REPEATER_SUPPORT DOT11R_FT_SUPPORT DOT11K_RRM_SUPPORT; do
+            grep -Fq "$feature" "$mt7615_make" || {
+              echo "LEDE MT7615 package lacks advertised feature: $feature" >&2
+              exit 1
+            }
+          done
+
+          echo 'LEDE source contract passed.'
+          echo 'No DD-WRT source, blob, patch, artifact, or release job was used by this preflight.'
+          echo 'The optional LEDE build remains separate and never feeds the DD-WRT release job.'
+
+      - name: Install dependencies for the isolated LEDE build
+        if: ${{ inputs.build_image }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            autoconf automake bison build-essential ccache clang cmake cpio curl \
+            device-tree-compiler file flex gawk gcc-multilib g++-multilib gettext git \
+            gperf help2man libelf-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev \
+            libncurses5-dev libncursesw5-dev libssl-dev python3 python3-setuptools \
+            rsync subversion swig texinfo uglifyjs unzip wget xxd zlib1g-dev
+
+      - name: Build the isolated LEDE image
+        if: ${{ inputs.build_image }}
+        run: |
+          set -euo pipefail
+          source_dir="$RUNNER_TEMP/k2p-lede-blob/source"
+          config_file="$RUNNER_TEMP/k2p-lede-blob/k2p-lede.config"
+          test -d "$source_dir"
+          test -f "$config_file"
+          cd "$source_dir"
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          cp "$config_file" .config
+          make defconfig
+          for setting in \
+            'CONFIG_TARGET_ramips_mt7621_DEVICE_phicomm_k2p=y' \
+            'CONFIG_PACKAGE_kmod-mt7615d=y' \
+            'CONFIG_MTK_APCLI_SUPPORT=y' \
+            'CONFIG_MTK_MAC_REPEATER_SUPPORT=y' \
+            'CONFIG_MTK_DOT11R_FT_SUPPORT=y' \
+            'CONFIG_MTK_DOT11K_RRM_SUPPORT=y'; do
+            grep -Fxq "$setting" .config || {
+              echo "LEDE defconfig dropped required setting: $setting" >&2
+              exit 1
+            }
+          done
+          make download -j8
+          make V=s -j"$(nproc)"
+
+      - name: Upload the isolated LEDE artifact
+        if: ${{ inputs.build_image }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: images-k2p-lede-blob
+          path: ${{ runner.temp }}/k2p-lede-blob/source/bin/targets/ramips/mt7621/*
+          if-no-files-found: error

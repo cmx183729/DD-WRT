@@ -184,6 +184,56 @@ define VerifyK2PDriverBoundary
 		esac
 endef
 
+# Keep the acceleration contract explicit for every K2P family.  SFE is the
+# DD-WRT software-forwarding default; the kernel choices below retain the
+# Flow Offload implementation without adding a second runtime firewall rule.
+define VerifyK2PAccelerationContract
+	@set -eu; \
+		case "$(PROFILE)" in \
+			k2p|k2p-mini|k2p-mt76) ;; \
+			*) exit 0 ;; \
+		esac; \
+		router_defaults="$(BUILD_DIR)/services/sysinit/defaults.c"; \
+		kernel_config="$(LINUX_DIR)/.config"; \
+		test -f "$$router_defaults" || { echo "missing router defaults: $$router_defaults" >&2; exit 1; }; \
+		test -f "$$kernel_config" || { echo "missing kernel config: $$kernel_config" >&2; exit 1; }; \
+		grep -Fq '{ "sfe", "1" }' "$$router_defaults" || { echo "K2P SFE default is no longer enabled" >&2; exit 1; }; \
+		for setting in 'CONFIG_NF_FLOW_TABLE=y' 'CONFIG_NF_FLOW_TABLE_HW=y' 'CONFIG_NETFILTER_XT_TARGET_FLOWOFFLOAD=y' 'CONFIG_SHORTCUT_FE=m'; do \
+			grep -Fxq "$$setting" "$$kernel_config" || { echo "K2P acceleration config missing: $$setting" >&2; exit 1; }; \
+		done; \
+		case "$(PROFILE)" in \
+			k2p|k2p-mini) \
+				for setting in 'CONFIG_HW_NAT=y' 'CONFIG_RA_NAT_HW=y' 'CONFIG_RA_HW_NAT=m' 'CONFIG_RA_HW_NAT_IPV6=y' 'CONFIG_RA_HW_NAT_WIFI=y' 'CONFIG_RAETH=y'; do \
+					grep -Fxq "$$setting" "$$kernel_config" || { echo "closed K2P acceleration config missing: $$setting" >&2; exit 1; }; \
+				done \
+				;; \
+			k2p-mt76) \
+				grep -Fxq 'CONFIG_NET_MEDIATEK_OFFLOAD=y' "$$kernel_config" || { echo "MT76 K2P offload config missing: CONFIG_NET_MEDIATEK_OFFLOAD=y" >&2; exit 1; } \
+				;; \
+		esac
+endef
+
+# The Padavan-derived MT7615 tree already provides the closed-driver wireless
+# capabilities needed by K2P.  Verify the compile-time feature contract
+# without changing the driver, EEPROM data, transmit power, or LTO settings.
+define VerifyK2PClosedWirelessFeatureContract
+	@set -eu; \
+		case "$(PROFILE)" in \
+			k2p|k2p-mini) ;; \
+			*) exit 0 ;; \
+		esac; \
+		kernel_config="$(LINUX_DIR)/.config"; \
+		driver_make="$(LINUX_DIR)/drivers/net/wireless/mt7615/mt_wifi_ap/Makefile"; \
+		test -f "$$kernel_config" || { echo "missing kernel config: $$kernel_config" >&2; exit 1; }; \
+		test -f "$$driver_make" || { echo "missing closed MT7615 Makefile: $$driver_make" >&2; exit 1; }; \
+		for setting in 'CONFIG_WDS_SUPPORT=y' 'CONFIG_APCLI_SUPPORT=y' 'CONFIG_MAC_REPEATER_SUPPORT=y' 'CONFIG_DOT11R_FT_SUPPORT=y' 'CONFIG_DOT11K_RRM_SUPPORT=y'; do \
+			grep -Fxq "$$setting" "$$kernel_config" || { echo "closed K2P wireless feature missing: $$setting" >&2; exit 1; }; \
+		done; \
+		for marker in '-DDOT11R_FT_SUPPORT' '-DAPCLI_SUPPORT' '-DMAC_REPEATER_SUPPORT'; do \
+			grep -Fq -- "$$marker" "$$driver_make" || { echo "closed MT7615 build flag missing: $$marker" >&2; exit 1; }; \
+		done
+endef
+
 # DD-WRT stages Qualcomm NSS ath11k sources unconditionally in the ath9k
 # rule.  K2P's MT76 tree has neither the NSS tree nor ath11k, so suppress only
 # those four irrelevant staging commands after the source checkout.
@@ -492,6 +542,8 @@ endif
 	$(call VerifyK2PDriverBoundary)
 
 	$(MAKE) -C "$(LINUX_DIR)" ARCH=mips CROSS_COMPILE=mipsel-linux-uclibc- olddefconfig prepare
+	$(call VerifyK2PAccelerationContract)
+	$(call VerifyK2PClosedWirelessFeatureContract)
 	$(MAKE_ROUTER) install_headers
 	$(call VerifyExportedKernelHeaders)
 	$(call InjectCMakeDependencyPaths)

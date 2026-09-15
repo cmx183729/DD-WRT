@@ -48,3 +48,27 @@ supported profiles are: `k2p k2p-mini k2p-mt76 dir-882-a1 dir-882-r1`.
 `make prepare` downloads the pinned `toolchain-mipsel_24kc_gcc-13.1.0_musl.tar.gz`
 only when it is missing, extracts it, and verifies the expected cross compiler. The
 archive is hosted at the [toolchain release](https://github.com/tsl0922/DD-WRT/releases/download/toolchain/toolchain-mipsel_24kc_gcc-13.1.0_musl.tar.gz).
+
+## K2P profile and delivery contract
+
+- `k2p` and `k2p-mini` use the existing Padavan-derived closed MT7615 driver
+  and HW NAT path. `k2p-mt76` remains the separate open `mt76` path.
+- PPPoE and IPv6 are enabled in all three router profiles. Their kernels retain
+  SFE, Netfilter Flow Offload and hardware Flow Offload support; closed profiles
+  additionally retain the original HW NAT settings. The prepare-time contract
+  verifies these settings rather than adding a competing runtime firewall rule.
+- Closed K2P profiles retain their existing WDS, AP-client, MAC-repeater,
+  802.11k and 802.11r feature selections. This is a build capability check, not
+  a substitute for configuring and testing a particular wireless topology.
+- The K2P DTS and image recipe intentionally keep the public `0x50000` Breed
+  layout. When flashing through Breed, select that same public layout; do not
+  use this image with a different flash-layout selection.
+
+`k2p-lede-blob` is a separate, manual-only GitHub Actions workflow. It fetches
+a caller-supplied immutable `coolsnowwolf/lede` commit and a SHA-256-pinned K2P
+configuration in `$RUNNER_TEMP`, then verifies the MT7615 package plus AP-client,
+MAC-repeater, 802.11k and 802.11r selections. Its default source preflight does
+not use this DD-WRT tree or publish an artifact. Setting `build_image` explicitly
+builds only a separate `images-k2p-lede-blob` artifact; it is never consumed by
+the DD-WRT release job. Hardware validation of that pinned configuration remains
+required before treating the LEDE image as deployable.
