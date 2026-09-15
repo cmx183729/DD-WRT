@@ -21,7 +21,7 @@ jobs:
       contents: read
     strategy:
       matrix:
-        profile: [k2p-mt76, k2p-mini, k2p, dir-882-a1, dir-882-r1]
+        profile: [k2p-mt76, k2p-mini, k2p]
     steps:
       - uses: actions/checkout@v7
       - name: Install packages
