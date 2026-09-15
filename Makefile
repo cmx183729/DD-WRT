@@ -121,6 +121,17 @@ define VerifyPppdStatsFix
 		! grep -Fq 'req.stats.p.' "$$source" || { echo "pppd still reads legacy statistics payload" >&2; exit 1; }
 endef
 
+define InjectDnscryptPluginFix
+	@set -eu; \
+		dnscrypt_rule="$(BUILD_DIR)/rules/dnscrypt.mk"; \
+		test -f "$$dnscrypt_rule" || { echo "missing dnscrypt rule: $$dnscrypt_rule" >&2; exit 1; }; \
+		if ! grep -Fq -- '--disable-plugins' "$$dnscrypt_rule"; then \
+			test "$$(grep -Fc -- '--disable-documentation' "$$dnscrypt_rule")" -eq 1 || { echo "unexpected dnscrypt configure arguments" >&2; exit 1; }; \
+			sed -i -e 's@--disable-documentation@--disable-plugins --disable-documentation@' -- "$$dnscrypt_rule"; \
+		fi; \
+		grep -Fq -- '--disable-plugins' "$$dnscrypt_rule" || { echo "dnscrypt plugin compatibility injection failed" >&2; exit 1; }
+endef
+
 define VerifyClosedDriverNVRAMHeaders
 	@test -f "$(BUILD_DIR)/shared/ddnvram.h" || { echo "missing DD-WRT NVRAM API header: $(BUILD_DIR)/shared/ddnvram.h" >&2; exit 1; }
 	@for source in "$(BUILD_DIR)/services/sysinit/sysinit-rt2880.c" "$(BUILD_DIR)/services/networking/wifi/rt2880.c" "$(BUILD_DIR)/httpd/visuals/wireless_ralink.c"; do test -f "$$source" && grep -Fq '#include <ddnvram.h>' "$$source" || { echo "closed-driver source did not receive the ddnvram.h compatibility update: $$source" >&2; exit 1; }; done
@@ -375,6 +386,7 @@ endif
 	$(call InjectCMakeDependencyPaths)
 	$(call VerifyKernelHeaderInjection)
 	python3 "$(TOP_DIR)/tools/fix-ar-flags.py" "$(BUILD_DIR)/rules" "$(BUILD_DIR)/Makefile.mt7621"
+	$(call InjectDnscryptPluginFix)
 	$(MAKE_ROUTER) gen_revision
 
 configure:
